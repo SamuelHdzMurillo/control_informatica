@@ -1,0 +1,149 @@
+document.addEventListener('DOMContentLoaded', () => {
+    const input = document.querySelector('[data-preview-fotos]');
+    const box = document.querySelector('[data-preview-box]');
+    if (input && box) {
+        input.addEventListener('change', () => {
+            box.innerHTML = '';
+            [...input.files].forEach((file) => {
+                if (!file.type.startsWith('image/')) return;
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.alt = file.name;
+                box.appendChild(img);
+            });
+        });
+    }
+
+    const search = document.getElementById('q-global');
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            search?.focus();
+        }
+    });
+
+    const readJson = (id) => {
+        const el = document.getElementById(id);
+        if (!el) return [];
+        try {
+            return JSON.parse(el.textContent || '[]');
+        } catch (err) {
+            return [];
+        }
+    };
+
+    const personas = readJson('data-personas');
+    const bienes = readJson('data-bienes');
+    const personaSelect = document.querySelector('[data-persona-select]');
+    const personaNueva = document.querySelector('[data-persona-nueva]');
+    const entregadoPor = document.getElementById('entregado_por');
+    const areaInput = document.getElementById('area_dependencia');
+    const telInput = document.getElementById('telefono');
+
+    const fillPersona = (p) => {
+        if (!p || !personaSelect) return;
+        personaSelect.value = String(p.id);
+        if (areaInput) areaInput.value = p.area || '';
+        if (telInput) telInput.value = p.telefono || '';
+        if (personaNueva) personaNueva.hidden = true;
+        if (entregadoPor) entregadoPor.required = false;
+    };
+
+    const syncPersona = () => {
+        if (!personaSelect) return;
+        const opt = personaSelect.selectedOptions[0];
+        const esNueva = personaSelect.value === 'nueva';
+        if (personaNueva) personaNueva.hidden = !esNueva;
+        if (entregadoPor) entregadoPor.required = esNueva;
+        if (esNueva || personaSelect.value === '') {
+            if (esNueva) return;
+            if (areaInput) areaInput.value = '';
+            if (telInput) telInput.value = '';
+            return;
+        }
+        if (opt) {
+            if (areaInput) areaInput.value = opt.dataset.area || '';
+            if (telInput) telInput.value = opt.dataset.telefono || '';
+        }
+    };
+
+    personaSelect?.addEventListener('change', syncPersona);
+    syncPersona();
+
+    const fillBien = (b) => {
+        if (!b) return;
+        const set = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.value = val || '';
+        };
+        set('bien_id', b.id);
+        set('tipo_equipo', b.tipo);
+        set('marca', b.marca);
+        set('modelo', b.modelo);
+        set('numero_serie', b.serie);
+        set('numero_inventario', b.inventario);
+        const bienEstado = document.querySelector('[data-bien-estado]');
+        if (bienEstado) bienEstado.textContent = 'Equipo del inventario seleccionado';
+        document.querySelectorAll('[data-suggest-box-bien], [data-suggest-box-bien-inv]').forEach((el) => {
+            el.hidden = true;
+        });
+        if (b.persona_id) {
+            const p = personas.find((x) => x.id === b.persona_id);
+            if (p) fillPersona(p);
+        }
+    };
+
+    const renderList = (container, items, onPick, labelFn) => {
+        if (!container) return;
+        container.innerHTML = '';
+        if (!items.length) {
+            container.hidden = true;
+            return;
+        }
+        items.slice(0, 8).forEach((item) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            const title = document.createElement('strong');
+            const sub = document.createElement('small');
+            const parts = labelFn(item);
+            title.textContent = parts[0];
+            sub.textContent = parts[1];
+            btn.append(title, sub);
+            btn.addEventListener('click', () => onPick(item));
+            container.appendChild(btn);
+        });
+        container.hidden = false;
+    };
+
+    const bindBien = (selector, boxSelector, field) => {
+        const el = document.querySelector(selector);
+        const list = document.querySelector(boxSelector);
+        if (!el || !list) return;
+        el.addEventListener('input', () => {
+            const bienId = document.getElementById('bien_id');
+            if (bienId) bienId.value = '';
+            const bienEstado = document.querySelector('[data-bien-estado]');
+            if (bienEstado) bienEstado.textContent = 'Se creará el perfil del equipo';
+            const q = el.value.trim().toLowerCase();
+            if (q.length < 2) {
+                list.hidden = true;
+                return;
+            }
+            const hits = bienes.filter((b) => (b[field] || '').toLowerCase().includes(q)
+                || (b.marca || '').toLowerCase().includes(q)
+                || (b.modelo || '').toLowerCase().includes(q));
+            renderList(list, hits, fillBien, (b) => [
+                b.marca + ' ' + b.modelo,
+                b.tipo + ' · Serie ' + (b.serie || 's/n') + ' · Inv. ' + (b.inventario || 's/n'),
+            ]);
+        });
+    };
+    bindBien('[data-suggest-bien="serie"]', '[data-suggest-box-bien]', 'serie');
+    bindBien('[data-suggest-bien="inventario"]', '[data-suggest-box-bien-inv]', 'inventario');
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.suggest-wrap')) {
+            document.querySelectorAll('.suggest-box').forEach((el) => { el.hidden = true; });
+        }
+    });
+});

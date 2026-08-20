@@ -1,0 +1,5 @@
+db_local.php
+uploads/fotos/*
+uploads/oficios/*
+!uploads/fotos/.gitkeep
+!uploads/oficios/.gitkeep
