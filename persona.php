@@ -102,9 +102,10 @@ require __DIR__ . '/includes/header.php';
                     <td><?= h($b['numero_serie'] ?: '—') ?></td>
                     <td><?= h($b['numero_inventario'] ?: '—') ?></td>
                     <td>
-                        <a href="<?= h(url('bien.php?id=' . $b['id'])) ?>">Historial</a>
-                        ·
-                        <a href="<?= h(url('recibir.php?bien=' . $b['id'] . '&persona=' . $id)) ?>">Nuevo servicio</a>
+                        <div class="btn-row">
+                            <a class="btn btn-sm btn-primary" href="<?= h(url('bien.php?id=' . $b['id'])) ?>">Historial</a>
+                            <a class="btn btn-sm btn-ok" href="<?= h(url('recibir.php?bien=' . $b['id'] . '&persona=' . $id)) ?>">Nuevo servicio</a>
+                        </div>
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -141,7 +142,9 @@ require __DIR__ . '/includes/header.php';
                     <td><?= h($eq['tipo_equipo'] . ' · ' . $eq['marca'] . ' ' . $eq['modelo']) ?></td>
                     <td><?= h(formatFecha($eq['fecha_recepcion'], true)) ?></td>
                     <td><span class="badge st-<?= h($eq['estado']) ?>"><?= h(estadoLabel($eq['estado'])) ?></span></td>
-                    <td><a href="<?= h(url('equipo.php?id=' . $eq['id'])) ?>">Ver</a></td>
+                    <td>
+                        <a class="btn btn-sm btn-primary" href="<?= h(url('equipo.php?id=' . $eq['id'])) ?>">Ver</a>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>

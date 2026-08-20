@@ -91,13 +91,13 @@ require __DIR__ . '/includes/header.php';
                 <td><?= h(formatFecha($eq['fecha_recepcion'], true)) ?></td>
                 <td><span class="badge st-<?= h($eq['estado']) ?>"><?= h(estadoLabel($eq['estado'])) ?></span></td>
                 <td>
-                    <a href="<?= h(url('equipo.php?id=' . $eq['id'])) ?>">Ver</a>
-                    ·
-                    <a href="<?= h(url('recibo.php?id=' . $eq['id'])) ?>">Recibo</a>
-                    <?php if (puedeEmitirOrden($eq)): ?>
-                        ·
-                        <a href="<?= h(url('orden.php?id=' . $eq['id'])) ?>">Orden</a>
-                    <?php endif; ?>
+                    <div class="btn-row">
+                        <a class="btn btn-sm btn-primary" href="<?= h(url('equipo.php?id=' . $eq['id'])) ?>">Ver</a>
+                        <a class="btn btn-sm btn-ghost" href="<?= h(url('recibo.php?id=' . $eq['id'])) ?>">Recibo</a>
+                        <?php if (puedeEmitirOrden($eq)): ?>
+                            <a class="btn btn-sm btn-ok" href="<?= h(url('orden.php?id=' . $eq['id'])) ?>">Orden</a>
+                        <?php endif; ?>
+                    </div>
                 </td>
             </tr>
         <?php endforeach; ?>

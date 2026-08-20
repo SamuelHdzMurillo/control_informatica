@@ -47,8 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </label>
             <button class="btn btn-primary" type="submit">Entrar</button>
         </form>
-        <p class="lead" style="margin-top:18px">¿Trajo un equipo? Consulte el avance con su folio en
-            <a href="<?= h(url('consulta.php')) ?>">consulta pública</a>.</p>
+        <p class="lead" style="margin-top:18px">¿Trajo un equipo? Consulte el avance con su folio.</p>
+        <a class="btn btn-ghost" href="<?= h(url('consulta.php')) ?>">Consulta pública</a>
     </main>
 </body>
 </html>

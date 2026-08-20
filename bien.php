@@ -53,7 +53,9 @@ require __DIR__ . '/includes/header.php';
         </div>
         <?php if ($dueno): ?>
             <dl>
-                <div class="kv-item"><dt>Nombre</dt><dd><a href="<?= h(url('persona.php?id=' . $dueno['id'])) ?>"><?= h($dueno['nombre']) ?></a></dd></div>
+                <div class="kv-item"><dt>Nombre</dt><dd>
+                    <a class="btn btn-sm btn-ghost" href="<?= h(url('persona.php?id=' . $dueno['id'])) ?>"><?= h($dueno['nombre']) ?></a>
+                </dd></div>
                 <div class="kv-item"><dt>Área</dt><dd><?= h($dueno['area_dependencia'] ?: '—') ?></dd></div>
                 <div class="kv-item"><dt>Teléfono</dt><dd><?= h($dueno['telefono'] ?: '—') ?></dd></div>
             </dl>
@@ -93,7 +95,9 @@ require __DIR__ . '/includes/header.php';
                     <td><?= h($eq['problema_reportado']) ?></td>
                     <td><?= h(formatFecha($eq['fecha_recepcion'], true)) ?></td>
                     <td><span class="badge st-<?= h($eq['estado']) ?>"><?= h(estadoLabel($eq['estado'])) ?></span></td>
-                    <td><a href="<?= h(url('equipo.php?id=' . $eq['id'])) ?>">Ver</a></td>
+                    <td>
+                        <a class="btn btn-sm btn-primary" href="<?= h(url('equipo.php?id=' . $eq['id'])) ?>">Ver</a>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>

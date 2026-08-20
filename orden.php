@@ -49,11 +49,14 @@ $equipoLinea = trim($eq['marca'] . ' ' . $eq['modelo']);
         }
         .no-print a, .no-print button {
             display: inline-flex; align-items: center; justify-content: center;
-            border: 0; border-radius: 8px; padding: 9px 14px; cursor: pointer;
+            border: 1px solid transparent; border-radius: 8px; padding: 10px 16px;
+            min-height: 40px; cursor: pointer;
             text-decoration: none; font-weight: 700; font-size: 14px; font-family: inherit;
         }
         .btn-print { background: #F17829; color: #fff; }
-        .btn-back { background: #fff; color: #222; border: 1px solid #ccc; }
+        .btn-print:hover { background: #d96a22; }
+        .btn-back { background: #fff; color: #222; border-color: #ccc; }
+        .btn-back:hover { border-color: #F17829; color: #F17829; }
 
         .hoja {
             width: 216mm;

@@ -108,7 +108,7 @@ require __DIR__ . '/includes/header.php';
         <h1><?= h($eq['folio']) ?></h1>
         <p class="lead"><?= h($eq['tipo_equipo'] . ' · ' . $eq['marca'] . ' ' . $eq['modelo']) ?></p>
     </div>
-    <div>
+    <div class="btn-row">
         <a class="btn btn-ghost" href="<?= h(url('recibo.php?id=' . $eq['id'])) ?>">Imprimir recibo</a>
         <?php if (puedeEmitirOrden($eq)): ?>
             <a class="btn btn-ok" href="<?= h(url('orden.php?id=' . $eq['id'])) ?>">Orden de servicio</a>
@@ -145,7 +145,9 @@ require __DIR__ . '/includes/header.php';
             <div class="kv-item"><dt>Número de serie</dt><dd><?= h($eq['numero_serie'] ?: '—') ?></dd></div>
             <div class="kv-item"><dt>Número de inventario</dt><dd><?= h($eq['numero_inventario'] ?: '—') ?></dd></div>
             <?php if (!empty($eq['bien_id'])): ?>
-                <div class="kv-item wide"><dt>Perfil del equipo</dt><dd><a href="<?= h(url('bien.php?id=' . $eq['bien_id'])) ?>">Ver historial de este bien</a></dd></div>
+                <div class="kv-item wide"><dt>Perfil del equipo</dt><dd>
+                    <a class="btn btn-sm btn-ghost" href="<?= h(url('bien.php?id=' . $eq['bien_id'])) ?>">Ver historial</a>
+                </dd></div>
             <?php endif; ?>
         </dl>
     </section>
@@ -161,7 +163,7 @@ require __DIR__ . '/includes/header.php';
         <dl>
             <div class="kv-item"><dt>Persona / área</dt><dd>
                 <?php if (!empty($eq['persona_id'])): ?>
-                    <a href="<?= h(url('persona.php?id=' . $eq['persona_id'])) ?>"><?= h($eq['entregado_por']) ?></a>
+                    <a class="btn btn-sm btn-ghost" href="<?= h(url('persona.php?id=' . $eq['persona_id'])) ?>"><?= h($eq['entregado_por']) ?></a>
                 <?php else: ?>
                     <?= h($eq['entregado_por']) ?>
                 <?php endif; ?>
@@ -205,7 +207,7 @@ require __DIR__ . '/includes/header.php';
         <div class="kv-item"><dt>Oficio</dt>
             <dd>
                 <?php if ($eq['oficio_path']): ?>
-                    <a href="<?= h(url('archivo.php?tipo=oficio&id=' . $eq['id'])) ?>">Ver oficio</a>
+                    <a class="btn btn-sm btn-info" href="<?= h(url('archivo.php?tipo=oficio&id=' . $eq['id'])) ?>">Ver oficio</a>
                 <?php else: ?>
                     Sin oficio
                 <?php endif; ?>

@@ -99,9 +99,10 @@ require __DIR__ . '/includes/header.php';
                 <td><?= (int) $p['equipos'] ?></td>
                 <td><?= (int) $p['servicios'] ?></td>
                 <td>
-                    <a href="<?= h(url('persona.php?id=' . $p['id'])) ?>">Ver perfil</a>
-                    ·
-                    <a href="<?= h(url('recibir.php?persona=' . $p['id'])) ?>">Recibir equipo</a>
+                    <div class="btn-row">
+                        <a class="btn btn-sm btn-primary" href="<?= h(url('persona.php?id=' . $p['id'])) ?>">Ver perfil</a>
+                        <a class="btn btn-sm btn-ok" href="<?= h(url('recibir.php?persona=' . $p['id'])) ?>">Recibir equipo</a>
+                    </div>
                 </td>
             </tr>
         <?php endforeach; ?>

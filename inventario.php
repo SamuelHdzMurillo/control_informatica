@@ -49,7 +49,7 @@ require __DIR__ . '/includes/header.php';
                 <td><?= h($b['numero_inventario'] ?: '—') ?></td>
                 <td>
                     <?php if (!empty($b['persona_id'])): ?>
-                        <a href="<?= h(url('persona.php?id=' . $b['persona_id'])) ?>"><?= h($b['persona_nombre'] ?: 'Ver') ?></a>
+                        <a class="btn btn-sm btn-ghost" href="<?= h(url('persona.php?id=' . $b['persona_id'])) ?>"><?= h($b['persona_nombre'] ?: 'Ver perfil') ?></a>
                     <?php else: ?>
                         —
                     <?php endif; ?>
@@ -57,9 +57,10 @@ require __DIR__ . '/includes/header.php';
                 <td><?= (int) $b['servicios'] ?></td>
                 <td><?= h(formatFecha($b['ultimo_servicio'] ?? null, true)) ?></td>
                 <td>
-                    <a href="<?= h(url('bien.php?id=' . $b['id'])) ?>">Historial</a>
-                    ·
-                    <a href="<?= h(url('recibir.php?bien=' . $b['id'])) ?>">Nuevo servicio</a>
+                    <div class="btn-row">
+                        <a class="btn btn-sm btn-primary" href="<?= h(url('bien.php?id=' . $b['id'])) ?>">Historial</a>
+                        <a class="btn btn-sm btn-ok" href="<?= h(url('recibir.php?bien=' . $b['id'])) ?>">Nuevo servicio</a>
+                    </div>
                 </td>
             </tr>
         <?php endforeach; ?>
