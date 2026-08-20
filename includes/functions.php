@@ -467,21 +467,134 @@ function listPersonas(PDO $pdo, string $q = ''): array
     return $stmt->fetchAll();
 }
 
-function listBienes(PDO $pdo, string $q = ''): array
+function listBienesMarcas(PDO $pdo): array
 {
-    $sql = 'SELECT b.*, p.nombre AS persona_nombre,
-                (SELECT COUNT(*) FROM equipos e WHERE e.bien_id = b.id) AS servicios,
-                (SELECT MAX(e.fecha_recepcion) FROM equipos e WHERE e.bien_id = b.id) AS ultimo_servicio
+    return $pdo->query(
+        "SELECT DISTINCT marca FROM bienes WHERE marca IS NOT NULL AND marca <> '' ORDER BY marca"
+    )->fetchAll(PDO::FETCH_COLUMN);
+}
+
+function listBienesAreas(PDO $pdo): array
+{
+    return $pdo->query(
+        "SELECT DISTINCT p.area_dependencia
+         FROM personas p
+         INNER JOIN bienes b ON b.persona_id = p.id
+         WHERE p.area_dependencia IS NOT NULL AND p.area_dependencia <> ''
+         ORDER BY p.area_dependencia"
+    )->fetchAll(PDO::FETCH_COLUMN);
+}
+
+function inventarioResumen(PDO $pdo): array
+{
+    $enSoporte = $pdo->query(
+        "SELECT COUNT(*) FROM (
+            SELECT b.id,
+                   (SELECT e.estado FROM equipos e
+                    WHERE e.bien_id = b.id
+                    ORDER BY e.fecha_recepcion DESC, e.id DESC
+                    LIMIT 1) AS st
             FROM bienes b
-            LEFT JOIN personas p ON p.id = b.persona_id';
+         ) t
+         WHERE t.st IS NOT NULL AND t.st <> 'entregado'"
+    )->fetchColumn();
+
+    return [
+        'total' => (int) $pdo->query('SELECT COUNT(*) FROM bienes')->fetchColumn(),
+        'con_inventario' => (int) $pdo->query(
+            "SELECT COUNT(*) FROM bienes WHERE numero_inventario IS NOT NULL AND numero_inventario <> ''"
+        )->fetchColumn(),
+        'en_soporte' => (int) $enSoporte,
+        'tipos' => (int) $pdo->query('SELECT COUNT(DISTINCT tipo_equipo) FROM bienes')->fetchColumn(),
+    ];
+}
+
+function listBienes(PDO $pdo, string $q = '', array $filters = []): array
+{
+    $sql = "SELECT b.*,
+                p.nombre AS persona_nombre,
+                p.area_dependencia AS persona_area,
+                p.telefono AS persona_telefono,
+                (SELECT COUNT(*) FROM equipos e WHERE e.bien_id = b.id) AS servicios,
+                ult.id AS ultimo_equipo_id,
+                ult.folio AS ultimo_folio,
+                ult.estado AS ultimo_estado,
+                ult.fecha_recepcion AS ultimo_servicio,
+                ult.problema_reportado AS ultimo_problema,
+                ult.tipo_problema AS ultimo_tipo_problema,
+                ult.estado_fisico AS ultimo_estado_fisico,
+                ult.accesorios AS ultimo_accesorios,
+                ult.observaciones AS ultimo_observaciones
+            FROM bienes b
+            LEFT JOIN personas p ON p.id = b.persona_id
+            LEFT JOIN equipos ult ON ult.id = (
+                SELECT e.id FROM equipos e
+                WHERE e.bien_id = b.id
+                ORDER BY e.fecha_recepcion DESC, e.id DESC
+                LIMIT 1
+            )";
+    $where = [];
     $params = [];
+
     if ($q !== '') {
-        $sql .= ' WHERE b.marca LIKE ? OR b.modelo LIKE ? OR b.numero_serie LIKE ?
-                  OR b.numero_inventario LIKE ? OR b.tipo_equipo LIKE ? OR p.nombre LIKE ?';
+        $where[] = '(b.marca LIKE ? OR b.modelo LIKE ? OR b.numero_serie LIKE ?
+                     OR b.numero_inventario LIKE ? OR b.tipo_equipo LIKE ?
+                     OR p.nombre LIKE ? OR p.area_dependencia LIKE ? OR p.telefono LIKE ?
+                     OR ult.folio LIKE ? OR ult.problema_reportado LIKE ? OR ult.accesorios LIKE ?)';
         $like = '%' . $q . '%';
-        $params = [$like, $like, $like, $like, $like, $like];
+        $params = array_fill(0, 11, $like);
     }
-    $sql .= ' ORDER BY b.marca, b.modelo, b.id';
+
+    $tipo = trim((string) ($filters['tipo'] ?? ''));
+    if ($tipo !== '') {
+        $where[] = 'b.tipo_equipo = ?';
+        $params[] = $tipo;
+    }
+
+    $marca = trim((string) ($filters['marca'] ?? ''));
+    if ($marca !== '') {
+        $where[] = 'b.marca = ?';
+        $params[] = $marca;
+    }
+
+    $area = trim((string) ($filters['area'] ?? ''));
+    if ($area !== '') {
+        $where[] = 'p.area_dependencia = ?';
+        $params[] = $area;
+    }
+
+    $estado = trim((string) ($filters['estado'] ?? ''));
+    if ($estado !== '' && isset(estadosEquipo()[$estado])) {
+        $where[] = 'ult.estado = ?';
+        $params[] = $estado;
+    }
+
+    $ident = trim((string) ($filters['ident'] ?? ''));
+    if ($ident === 'con_inventario') {
+        $where[] = "b.numero_inventario IS NOT NULL AND b.numero_inventario <> ''";
+    } elseif ($ident === 'sin_inventario') {
+        $where[] = "(b.numero_inventario IS NULL OR b.numero_inventario = '')";
+    } elseif ($ident === 'con_serie') {
+        $where[] = "b.numero_serie IS NOT NULL AND b.numero_serie <> ''";
+    } elseif ($ident === 'sin_serie') {
+        $where[] = "(b.numero_serie IS NULL OR b.numero_serie = '')";
+    }
+
+    $historial = trim((string) ($filters['historial'] ?? ''));
+    if ($historial === 'con_servicios') {
+        $where[] = '(SELECT COUNT(*) FROM equipos e WHERE e.bien_id = b.id) > 0';
+    } elseif ($historial === 'sin_servicios') {
+        $where[] = '(SELECT COUNT(*) FROM equipos e WHERE e.bien_id = b.id) = 0';
+    } elseif ($historial === 'en_soporte') {
+        $where[] = "ult.estado IS NOT NULL AND ult.estado <> 'entregado'";
+    } elseif ($historial === 'entregados') {
+        $where[] = "ult.estado = 'entregado'";
+    }
+
+    if ($where) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+    $sql .= ' ORDER BY b.tipo_equipo, b.marca, b.modelo, b.id';
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     return $stmt->fetchAll();

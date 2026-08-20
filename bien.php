@@ -12,6 +12,7 @@ if (!$bien) {
 }
 $dueno = !empty($bien['persona_id']) ? getPersona($pdo, (int) $bien['persona_id']) : null;
 $servicios = serviciosDeBien($pdo, $id);
+$ultimo = $servicios[0] ?? null;
 $pageTitle = trim($bien['marca'] . ' ' . $bien['modelo']);
 require __DIR__ . '/includes/header.php';
 ?>
@@ -41,6 +42,14 @@ require __DIR__ . '/includes/header.php';
             <div class="kv-item"><dt>Número de serie</dt><dd><?= h($bien['numero_serie'] ?: '—') ?></dd></div>
             <div class="kv-item"><dt>Número de inventario</dt><dd><?= h($bien['numero_inventario'] ?: '—') ?></dd></div>
             <div class="kv-item"><dt>Servicios</dt><dd><?= count($servicios) ?></dd></div>
+            <?php if ($ultimo): ?>
+                <div class="kv-item"><dt>Estado físico (último ingreso)</dt><dd><?= h($ultimo['estado_fisico'] ?: '—') ?></dd></div>
+                <div class="kv-item"><dt>Última falla</dt><dd><?= h(trim(($ultimo['tipo_problema'] ?? '') . (!empty($ultimo['problema_reportado']) ? ' · ' . $ultimo['problema_reportado'] : '')) ?: '—') ?></dd></div>
+                <div class="kv-item wide"><dt>Accesorios recibidos</dt><dd><?= h($ultimo['accesorios'] ?: '—') ?></dd></div>
+                <?php if (!empty($ultimo['observaciones'])): ?>
+                    <div class="kv-item wide"><dt>Observaciones</dt><dd><?= h($ultimo['observaciones']) ?></dd></div>
+                <?php endif; ?>
+            <?php endif; ?>
         </dl>
     </section>
     <section class="section">
