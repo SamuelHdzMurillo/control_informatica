@@ -289,19 +289,21 @@ $equipoLinea = trim($eq['marca'] . ' ' . $eq['modelo']);
         </div>
     </section>
 
+    <?php if (in_array($eq['estado'], ['no_reparable'], true)): ?>
     <section class="seccion">
         <h2>Diagnóstico</h2>
         <div class="campo">
             <span class="valor caja"><?= h($diagnostico !== '' ? $diagnostico : 'Sin diagnóstico capturado.') ?></span>
         </div>
     </section>
-
+    <?php else: ?>
     <section class="seccion">
         <h2>Trabajo realizado · descripción</h2>
         <div class="campo">
             <span class="valor caja"><?= h($trabajoRealizado !== '' ? $trabajoRealizado : 'Sin registro de trabajo realizado.') ?></span>
         </div>
     </section>
+    <?php endif; ?>
 
     <section class="seccion">
         <h2>Observaciones</h2>

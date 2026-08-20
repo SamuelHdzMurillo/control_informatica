@@ -224,7 +224,7 @@ function getDiagnostico(PDO $pdo, array $eq): string
     }
     $stmt = $pdo->prepare(
         "SELECT comentario FROM bitacora
-         WHERE equipo_id = ? AND estado = 'diagnostico'
+         WHERE equipo_id = ? AND estado IN ('diagnostico', 'no_reparable')
          ORDER BY id ASC"
     );
     $stmt->execute([(int) $eq['id']]);
@@ -244,7 +244,7 @@ function faltantesOrden(PDO $pdo, array $eq): array
     $faltan = [];
     $estado = (string) ($eq['estado'] ?? '');
     if (!in_array($estado, estadosOrdenServicio(), true)) {
-        $faltan[] = 'Cambiar el estado a “Listo para entrega” (ahora está en “' . estadoLabel($estado) . '”).';
+        $faltan[] = 'Cambiar el estado a “Listo para entrega” o “No reparable” (ahora está en “' . estadoLabel($estado) . '”).';
     }
     $diagnostico = getDiagnostico($pdo, $eq);
     $trabajo = getTrabajoRealizado($pdo, $eq);
@@ -252,7 +252,7 @@ function faltantesOrden(PDO $pdo, array $eq): array
         $faltan[] = 'Capturar el diagnóstico (por qué no se puede reparar).';
     }
     if (in_array($estado, ['listo', 'entregado'], true) && $trabajo === '') {
-        $faltan[] = 'Capturar el trabajo realizado. Ese dato se llena cuando el equipo ya está reparado (estado “En reparación” o “Listo para entrega”).';
+        $faltan[] = 'Capturar el trabajo realizado. Ese dato se llena al pasar a “Listo para entrega”.';
     }
     return $faltan;
 }
@@ -676,7 +676,7 @@ function getTrabajoRealizado(PDO $pdo, array $eq): string
     }
     $stmt = $pdo->prepare(
         "SELECT comentario FROM bitacora
-         WHERE equipo_id = ? AND estado IN ('reparacion', 'listo', 'no_reparable')
+         WHERE equipo_id = ? AND estado IN ('listo')
          ORDER BY id ASC"
     );
     $stmt->execute([(int) $eq['id']]);

@@ -27,13 +27,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!isset(estadosEquipo()[$estado])) {
                 throw new RuntimeException('Estado no válido.');
             }
-            $esDiagnostico = in_array($estado, ['diagnostico', 'no_reparable'], true);
-            $esReparacion = in_array($estado, ['reparacion', 'listo'], true);
+            $esDiagnostico = $estado === 'no_reparable';
+            $esReparacion = $estado === 'listo';
             if ($esDiagnostico && $diagnostico === '') {
-                throw new RuntimeException('Capture el diagnóstico. Ese dato corresponde a la revisión del equipo.');
+                throw new RuntimeException('Capture el diagnóstico. En “No reparable” es obligatorio explicar por qué no se puede reparar.');
             }
             if ($esReparacion && $trabajo === '') {
-                throw new RuntimeException('Capture el trabajo realizado. Ese dato se llena cuando el equipo ya está reparado.');
+                throw new RuntimeException('Capture el trabajo realizado. Ese dato se llena cuando el equipo queda listo para entrega.');
             }
             $comentario = 'El equipo pasó a: ' . estadoLabel($estado);
             if ($esDiagnostico) {
@@ -192,7 +192,7 @@ require __DIR__ . '/includes/header.php';
         <span class="section-num">+</span>
         <div>
             <h2>Registrar avance</h2>
-            <p class="hint">El diagnóstico se captura en “En diagnóstico”. El trabajo realizado se captura cuando el equipo ya está reparado.</p>
+            <p class="hint">Diagnóstico solo si el equipo no es reparable. Trabajo realizado solo cuando queda listo para entrega.</p>
         </div>
         <button class="btn btn-sm btn-ghost" type="button" data-hide-panels>Cerrar</button>
     </div>
@@ -207,11 +207,11 @@ require __DIR__ . '/includes/header.php';
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="field" id="campo-diagnostico" <?= in_array($eq['estado'], ['diagnostico', 'no_reparable'], true) ? '' : 'hidden' ?>>
+        <div class="field" id="campo-diagnostico" <?= $eq['estado'] === 'no_reparable' ? '' : 'hidden' ?>>
             <label>Diagnóstico <span class="req">*</span></label>
-            <textarea name="diagnostico" id="avance-diagnostico" placeholder="Qué se encontró al revisar el equipo."><?= h($diagnosticoTxt) ?></textarea>
+            <textarea name="diagnostico" id="avance-diagnostico" placeholder="Por qué no se puede reparar."><?= h($diagnosticoTxt) ?></textarea>
         </div>
-        <div class="field" id="campo-trabajo" <?= in_array($eq['estado'], ['reparacion', 'listo'], true) ? '' : 'hidden' ?>>
+        <div class="field" id="campo-trabajo" <?= $eq['estado'] === 'listo' ? '' : 'hidden' ?>>
             <label>Trabajo realizado <span class="req">*</span></label>
             <textarea name="trabajo_realizado" id="avance-trabajo" placeholder="Qué se hizo: piezas, instalación, limpieza, etc."><?= h($trabajoTxt) ?></textarea>
         </div>
@@ -283,8 +283,8 @@ require __DIR__ . '/includes/header.php';
     if (!sel) return;
     function sync() {
         var v = sel.value;
-        var esDiag = v === 'diagnostico' || v === 'no_reparable';
-        var esTrab = v === 'reparacion' || v === 'listo';
+        var esDiag = v === 'no_reparable';
+        var esTrab = v === 'listo';
         if (diag) {
             diag.hidden = !esDiag;
             diag.style.display = esDiag ? '' : 'none';
@@ -358,8 +358,12 @@ require __DIR__ . '/includes/header.php';
                     <?php endif; ?>
                 </dd></div>
                 <div class="fact wide"><dt>Descripción de la falla</dt><dd><?= nl2br(h($eq['descripcion_falla'])) ?></dd></div>
-                <div class="fact"><dt>Diagnóstico</dt><dd><?= $diagnosticoTxt !== '' ? nl2br(h($diagnosticoTxt)) : 'Sin capturar' ?></dd></div>
-                <div class="fact"><dt>Trabajo realizado</dt><dd><?= $trabajoTxt !== '' ? nl2br(h($trabajoTxt)) : 'Sin capturar' ?></dd></div>
+                <?php if ($eq['estado'] === 'no_reparable' || $diagnosticoTxt !== ''): ?>
+                    <div class="fact wide"><dt>Diagnóstico</dt><dd><?= $diagnosticoTxt !== '' ? nl2br(h($diagnosticoTxt)) : 'Sin capturar' ?></dd></div>
+                <?php endif; ?>
+                <?php if (in_array($eq['estado'], ['listo', 'entregado'], true) || $trabajoTxt !== ''): ?>
+                    <div class="fact wide"><dt>Trabajo realizado</dt><dd><?= $trabajoTxt !== '' ? nl2br(h($trabajoTxt)) : 'Sin capturar' ?></dd></div>
+                <?php endif; ?>
                 <div class="fact"><dt>Accesorios</dt><dd><?= nl2br(h($eq['accesorios'] ?: '—')) ?></dd></div>
                 <div class="fact"><dt>Observaciones</dt><dd><?= nl2br(h($eq['observaciones'] ?: '—')) ?></dd></div>
             </dl>
