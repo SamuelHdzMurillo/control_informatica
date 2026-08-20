@@ -23,6 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $estado = $_POST['estado'] ?? '';
             $diagnostico = trim($_POST['diagnostico'] ?? '');
             $trabajo = trim($_POST['trabajo_realizado'] ?? '');
+            $observacion = trim($_POST['observacion'] ?? '');
             $publico = isset($_POST['visible_publico']);
             if (!isset(estadosEquipo()[$estado])) {
                 throw new RuntimeException('Estado no válido.');
@@ -48,6 +49,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $upd = $pdo->prepare('UPDATE equipos SET estado = ? WHERE id = ?');
                 $upd->execute([$estado, $id]);
             }
+            if ($observacion !== '') {
+                $comentario = $observacion;
+            }
             addBitacora($pdo, $id, $estado, $comentario, $publico, (int) currentUser()['id']);
             $eqActualizado = getEquipo($pdo, $id);
             if (in_array($estado, ['listo', 'no_reparable'], true) && puedeEmitirOrden($pdo, $eqActualizado)) {
@@ -57,16 +61,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('ok', 'Avance registrado. Quien tenga el recibo ya puede verlo.');
         } elseif ($accion === 'entregar') {
             $entregadoA = trim($_POST['entregado_a'] ?? '');
+            $observacion = trim($_POST['observacion'] ?? '');
             if ($entregadoA === '') {
                 throw new RuntimeException('Indique a quién se entrega el equipo.');
             }
             $upd = $pdo->prepare('UPDATE equipos SET estado = ?, entregado_a = ?, fecha_entrega = NOW() WHERE id = ?');
             $upd->execute(['entregado', $entregadoA, $id]);
+            $comentario = 'Equipo entregado a ' . $entregadoA . '.';
+            if ($observacion !== '') {
+                $comentario .= ' ' . $observacion;
+            }
             addBitacora(
                 $pdo,
                 $id,
                 'entregado',
-                'Equipo entregado a ' . $entregadoA . '.',
+                $comentario,
                 true,
                 (int) currentUser()['id']
             );
@@ -119,6 +128,14 @@ $bitacora = getBitacora($pdo, $id, false);
 $paso = estadoPaso($eq['estado']);
 $diagnosticoTxt = getDiagnostico($pdo, $eq);
 $trabajoTxt = getTrabajoRealizado($pdo, $eq);
+$obsPorEstado = observacionesPorEstado($bitacora);
+if (!isset($obsPorEstado['recibido'])) {
+    $recepcionObs = trim((string) ($eq['observaciones'] ?? ''));
+    if ($recepcionObs !== '') {
+        $obsPorEstado['recibido'] = $recepcionObs;
+    }
+}
+$obsPorPaso = observacionesPorPaso($bitacora, $eq);
 $faltanOrden = faltantesOrden($pdo, $eq);
 $puedeOrden = $faltanOrden === [];
 $pageTitle = $eq['folio'];
@@ -167,8 +184,14 @@ require __DIR__ . '/includes/header.php';
     $pasos = [1 => 'Recibido', 2 => 'Diagnóstico', 3 => 'Reparación', 4 => 'Listo', 5 => 'Entregado'];
     foreach ($pasos as $n => $label):
         $class = $n < $paso ? 'done' : ($n === $paso ? 'on' : '');
+        $nota = trim((string) ($obsPorPaso[$n] ?? ''));
         ?>
-        <div class="step <?= $class ?>"><?= h($label) ?></div>
+        <div class="step <?= $class ?>">
+            <?= h($label) ?>
+            <?php if ($nota !== ''): ?>
+                <small class="step-note" title="<?= h($nota) ?>"><?= h($nota) ?></small>
+            <?php endif; ?>
+        </div>
     <?php endforeach; ?>
 </div>
 
@@ -192,7 +215,7 @@ require __DIR__ . '/includes/header.php';
         <span class="section-num">+</span>
         <div>
             <h2>Registrar avance</h2>
-            <p class="hint">Diagnóstico solo si el equipo no es reparable. Trabajo realizado solo cuando queda listo para entrega.</p>
+            <p class="hint">Deje una observación de lo que se hizo en este estado. Es opcional, salvo diagnóstico (no reparable) y trabajo realizado (listo).</p>
         </div>
         <button class="btn btn-sm btn-ghost" type="button" data-hide-panels>Cerrar</button>
     </div>
@@ -214,6 +237,10 @@ require __DIR__ . '/includes/header.php';
         <div class="field" id="campo-trabajo" <?= $eq['estado'] === 'listo' ? '' : 'hidden' ?>>
             <label>Trabajo realizado <span class="req">*</span></label>
             <textarea name="trabajo_realizado" id="avance-trabajo" placeholder="Qué se hizo: piezas, instalación, limpieza, etc."><?= h($trabajoTxt) ?></textarea>
+        </div>
+        <div class="field">
+            <label>Observación <span class="hint-inline">opcional</span></label>
+            <textarea name="observacion" id="avance-observacion" class="textarea-sm" placeholder="Qué se encontró o se hizo en este estado."><?= h($obsPorEstado[$eq['estado']] ?? '') ?></textarea>
         </div>
         <label class="check">
             <input type="checkbox" name="visible_publico" checked>
@@ -240,6 +267,10 @@ require __DIR__ . '/includes/header.php';
         <div class="field">
             <label>Entregar a</label>
             <input name="entregado_a" id="entregado_a" required placeholder="Nombre de quien recoge" value="<?= h($eq['entregado_por']) ?>">
+        </div>
+        <div class="field">
+            <label>Observación <span class="hint-inline">opcional</span></label>
+            <textarea name="observacion" class="textarea-sm" placeholder="Notas de la entrega, si aplica."></textarea>
         </div>
         <div class="btn-row">
             <button class="btn btn-ok" type="submit">Marcar como entregado</button>
@@ -280,7 +311,15 @@ require __DIR__ . '/includes/header.php';
     var trab = document.getElementById('campo-trabajo');
     var tDiag = document.getElementById('avance-diagnostico');
     var tTrab = document.getElementById('avance-trabajo');
+    var tObs = document.getElementById('avance-observacion');
+    var obsMap = <?= json_encode($obsPorEstado, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>;
     if (!sel) return;
+    function obsDe(estado) {
+        var o = (obsMap && obsMap[estado]) ? String(obsMap[estado]) : '';
+        if (estado === 'no_reparable' && tDiag && o === tDiag.value.trim()) return '';
+        if (estado === 'listo' && tTrab && o === tTrab.value.trim()) return '';
+        return o;
+    }
     function sync() {
         var v = sel.value;
         var esDiag = v === 'no_reparable';
@@ -295,6 +334,7 @@ require __DIR__ . '/includes/header.php';
         }
         if (tDiag) tDiag.required = esDiag;
         if (tTrab) tTrab.required = esTrab;
+        if (tObs) tObs.value = obsDe(v);
     }
     sel.addEventListener('change', sync);
     sync();
@@ -424,9 +464,14 @@ require __DIR__ . '/includes/header.php';
         <?php else: ?>
             <ul class="timeline">
                 <?php foreach ($bitacora as $b): ?>
+                    <?php $esObs = comentarioEsObservacion((string) ($b['comentario'] ?? '')); ?>
                     <li>
                         <time><?= h(formatFecha($b['created_at'], true)) ?> · <?= h(estadoLabel($b['estado'])) ?></time>
-                        <div><?= nl2br(h($b['comentario'])) ?></div>
+                        <?php if ($esObs): ?>
+                            <div class="tl-obs"><?= nl2br(h($b['comentario'])) ?></div>
+                        <?php else: ?>
+                            <div><?= nl2br(h($b['comentario'])) ?></div>
+                        <?php endif; ?>
                         <small><?= h($b['usuario_nombre'] ?: 'Sistema') ?> · <?= $b['visible_publico'] ? 'Público' : 'Interno' ?></small>
                     </li>
                 <?php endforeach; ?>

@@ -10,6 +10,7 @@ if ($folio !== '' && !$eq) {
 }
 $bitacora = $eq ? getBitacora(db(), (int) $eq['id'], true) : [];
 $paso = $eq ? estadoPaso($eq['estado']) : 0;
+$obsPorPaso = $eq ? observacionesPorPaso($bitacora) : [];
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -40,8 +41,14 @@ $paso = $eq ? estadoPaso($eq['estado']) : 0;
             $pasos = [1 => 'Recibido', 2 => 'Diagnóstico', 3 => 'Reparación', 4 => 'Listo', 5 => 'Entregado'];
             foreach ($pasos as $n => $label):
                 $class = $n < $paso ? 'done' : ($n === $paso ? 'on' : '');
+                $nota = trim((string) ($obsPorPaso[$n] ?? ''));
                 ?>
-                <div class="step <?= $class ?>"><?= h($label) ?></div>
+                <div class="step <?= $class ?>">
+                    <?= h($label) ?>
+                    <?php if ($nota !== ''): ?>
+                        <small class="step-note" title="<?= h($nota) ?>"><?= h($nota) ?></small>
+                    <?php endif; ?>
+                </div>
             <?php endforeach; ?>
         </div>
         <dl class="kv">

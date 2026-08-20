@@ -216,6 +216,57 @@ function comentarioEsAutomatico(string $comentario): bool
     return $comentario === '' || str_starts_with($comentario, 'El equipo pasó a:');
 }
 
+function comentarioEsObservacion(string $comentario): bool
+{
+    $comentario = trim($comentario);
+    if ($comentario === '' || comentarioEsAutomatico($comentario)) {
+        return false;
+    }
+    return !str_starts_with($comentario, 'Equipo recibido.');
+}
+
+function observacionesPorEstado(array $bitacora): array
+{
+    $out = [];
+    foreach ($bitacora as $b) {
+        $comentario = trim((string) ($b['comentario'] ?? ''));
+        if (!comentarioEsObservacion($comentario)) {
+            continue;
+        }
+        $out[(string) ($b['estado'] ?? '')] = $comentario;
+    }
+    return $out;
+}
+
+function observacionesPorPaso(array $bitacora, array $eq = []): array
+{
+    $pasoDe = [
+        'recibido' => 1,
+        'diagnostico' => 2,
+        'reparacion' => 3,
+        'refacciones' => 3,
+        'no_reparable' => 3,
+        'listo' => 4,
+        'entregado' => 5,
+    ];
+    $out = [];
+    $recepcion = trim((string) ($eq['observaciones'] ?? ''));
+    if ($recepcion !== '') {
+        $out[1] = $recepcion;
+    }
+    foreach ($bitacora as $b) {
+        $comentario = trim((string) ($b['comentario'] ?? ''));
+        if (!comentarioEsObservacion($comentario)) {
+            continue;
+        }
+        $paso = $pasoDe[(string) ($b['estado'] ?? '')] ?? 0;
+        if ($paso > 0) {
+            $out[$paso] = $comentario;
+        }
+    }
+    return $out;
+}
+
 function getDiagnostico(PDO $pdo, array $eq): string
 {
     $directo = trim((string) ($eq['diagnostico'] ?? ''));
