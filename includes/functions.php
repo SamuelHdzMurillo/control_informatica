@@ -36,8 +36,27 @@ function logoUrl(): string
 function userInitial(?array $user = null): string
 {
     $user = $user ?? currentUser();
-    $name = trim((string) ($user['nombre'] ?? 'A'));
-    return strtoupper(substr($name, 0, 1));
+    return nombreIniciales((string) ($user['nombre'] ?? 'A'), 1);
+}
+
+function nombreIniciales(?string $nombre, int $max = 2): string
+{
+    $nombre = trim((string) $nombre);
+    if ($nombre === '') {
+        return '?';
+    }
+    $parts = preg_split('/\s+/u', $nombre) ?: [$nombre];
+    $take = static function (string $s): string {
+        if (function_exists('mb_substr') && function_exists('mb_strtoupper')) {
+            return mb_strtoupper(mb_substr($s, 0, 1, 'UTF-8'), 'UTF-8');
+        }
+        return strtoupper(substr($s, 0, 1));
+    };
+    $ini = $take((string) $parts[0]);
+    if ($max > 1 && count($parts) > 1) {
+        $ini .= $take((string) $parts[count($parts) - 1]);
+    }
+    return $ini;
 }
 
 function csrfToken(): string
@@ -449,22 +468,40 @@ function saveBien(PDO $pdo, array $data, int $personaId = 0, int $id = 0): int
     return (int) $pdo->lastInsertId();
 }
 
-function listPersonas(PDO $pdo, string $q = ''): array
+function listPersonas(PDO $pdo, string $q = '', string $area = ''): array
 {
     $sql = 'SELECT p.*,
                 (SELECT COUNT(*) FROM bienes b WHERE b.persona_id = p.id) AS equipos,
-                (SELECT COUNT(*) FROM equipos e WHERE e.persona_id = p.id) AS servicios
+                (SELECT COUNT(*) FROM equipos e WHERE e.persona_id = p.id) AS servicios,
+                (SELECT MAX(e.fecha_recepcion) FROM equipos e WHERE e.persona_id = p.id) AS ultimo_servicio
             FROM personas p';
+    $where = [];
     $params = [];
     if ($q !== '') {
-        $sql .= ' WHERE p.nombre LIKE ? OR p.area_dependencia LIKE ? OR p.telefono LIKE ?';
+        $where[] = '(p.nombre LIKE ? OR p.area_dependencia LIKE ? OR p.telefono LIKE ?)';
         $like = '%' . $q . '%';
         $params = [$like, $like, $like];
+    }
+    if ($area !== '') {
+        $where[] = 'p.area_dependencia = ?';
+        $params[] = $area;
+    }
+    if ($where) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
     }
     $sql .= ' ORDER BY p.nombre';
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     return $stmt->fetchAll();
+}
+
+function listPersonasAreas(PDO $pdo): array
+{
+    return $pdo->query(
+        "SELECT DISTINCT area_dependencia FROM personas
+         WHERE area_dependencia IS NOT NULL AND area_dependencia <> ''
+         ORDER BY area_dependencia"
+    )->fetchAll(PDO::FETCH_COLUMN);
 }
 
 function listBienesMarcas(PDO $pdo): array
@@ -483,30 +520,6 @@ function listBienesAreas(PDO $pdo): array
          WHERE p.area_dependencia IS NOT NULL AND p.area_dependencia <> ''
          ORDER BY p.area_dependencia"
     )->fetchAll(PDO::FETCH_COLUMN);
-}
-
-function inventarioResumen(PDO $pdo): array
-{
-    $enSoporte = $pdo->query(
-        "SELECT COUNT(*) FROM (
-            SELECT b.id,
-                   (SELECT e.estado FROM equipos e
-                    WHERE e.bien_id = b.id
-                    ORDER BY e.fecha_recepcion DESC, e.id DESC
-                    LIMIT 1) AS st
-            FROM bienes b
-         ) t
-         WHERE t.st IS NOT NULL AND t.st <> 'entregado'"
-    )->fetchColumn();
-
-    return [
-        'total' => (int) $pdo->query('SELECT COUNT(*) FROM bienes')->fetchColumn(),
-        'con_inventario' => (int) $pdo->query(
-            "SELECT COUNT(*) FROM bienes WHERE numero_inventario IS NOT NULL AND numero_inventario <> ''"
-        )->fetchColumn(),
-        'en_soporte' => (int) $enSoporte,
-        'tipos' => (int) $pdo->query('SELECT COUNT(DISTINCT tipo_equipo) FROM bienes')->fetchColumn(),
-    ];
 }
 
 function listBienes(PDO $pdo, string $q = '', array $filters = []): array

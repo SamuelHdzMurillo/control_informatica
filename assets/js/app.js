@@ -88,6 +88,16 @@ document.addEventListener('DOMContentLoaded', () => {
         filterBtn.classList.add('on');
     }
 
+    document.querySelectorAll('[data-toggle-panel]').forEach((btn) => {
+        const panel = document.querySelector(btn.getAttribute('data-toggle-panel') || '');
+        if (!panel) return;
+        if (!panel.hidden) btn.classList.add('on');
+        btn.addEventListener('click', () => {
+            panel.hidden = !panel.hidden;
+            btn.classList.toggle('on', !panel.hidden);
+        });
+    });
+
     const readJson = (id) => {
         const el = document.getElementById(id);
         if (!el) return [];

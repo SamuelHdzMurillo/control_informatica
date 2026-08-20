@@ -36,25 +36,31 @@ $servicios = serviciosDePersona($pdo, $id);
 $pageTitle = $persona['nombre'];
 require __DIR__ . '/includes/header.php';
 ?>
-<div class="topbar">
-    <div>
-        <p class="eyebrow">Perfil de persona</p>
-        <h1><?= h($persona['nombre']) ?></h1>
-        <p class="lead"><?= h($persona['area_dependencia'] ?: 'Sin área') ?> · <?= h($persona['telefono'] ?: 'Sin teléfono') ?></p>
+<div class="page-head">
+    <div class="ppl-head">
+        <span class="ppl-avatar lg"><?= h(nombreIniciales($persona['nombre'] ?? '')) ?></span>
+        <div>
+            <p class="eyebrow">Perfil de persona</p>
+            <h1><?= h($persona['nombre']) ?></h1>
+            <p class="page-sub"><?= h($persona['area_dependencia'] ?: 'Sin área') ?> · <?= h($persona['telefono'] ?: 'Sin teléfono') ?></p>
+        </div>
     </div>
-    <a class="btn btn-ok" href="<?= h(url('recibir.php?persona=' . $id)) ?>">+ Recibir equipo</a>
+    <div class="btn-row">
+        <a class="btn btn-ghost" href="<?= h(url('personas.php')) ?>">Directorio</a>
+        <button class="btn btn-ghost" type="button" data-toggle-panel="#editar-persona">Editar</button>
+        <a class="btn btn-ok" href="<?= h(url('recibir.php?persona=' . $id)) ?>">+ Recibir equipo</a>
+    </div>
 </div>
 
-<div class="sections">
-<section class="section">
+<section class="card ppl-alta" id="editar-persona" hidden>
     <div class="section-head">
         <span class="section-num">1</span>
         <div>
             <h2>Datos del perfil</h2>
-            <p class="hint">Estos datos se reutilizan al recibir equipos.</p>
+            <p class="hint">Se reutilizan al recibir equipos.</p>
         </div>
     </div>
-    <form method="post" class="grid-3">
+    <form method="post" class="ppl-form-grid">
         <?= csrfField() ?>
         <div class="field">
             <label>Nombre</label>
@@ -68,80 +74,83 @@ require __DIR__ . '/includes/header.php';
             <label>Teléfono</label>
             <input name="telefono" value="<?= h($persona['telefono'] ?? '') ?>">
         </div>
-        <div class="field" style="justify-content:end">
-            <label>&nbsp;</label>
-            <button class="btn btn-primary" type="submit">Guardar cambios</button>
-        </div>
+        <button class="btn btn-primary" type="submit">Guardar</button>
     </form>
 </section>
 
-<section class="section">
+<div class="kv-cards">
+<section class="card">
     <div class="section-head">
-        <span class="section-num">2</span>
         <div>
-            <h2>Equipos de esta persona</h2>
-            <p class="hint">Bienes asociados a su perfil.</p>
+            <h2>Equipos</h2>
+            <p class="hint">Bienes asociados a este perfil.</p>
         </div>
     </div>
     <?php if (!$bienes): ?>
-        <p class="lead">Aún no tiene equipos en inventario.</p>
+        <p class="empty-state">Aún no tiene equipos en inventario.</p>
     <?php else: ?>
-        <table>
+        <div class="table-wrap">
+        <table class="inv-table">
             <thead>
                 <tr>
                     <th>Equipo</th>
-                    <th>Serie</th>
-                    <th>Inventario</th>
+                    <th>Identificación</th>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
             <?php foreach ($bienes as $b): ?>
                 <tr>
-                    <td><?= h($b['tipo_equipo']) ?><br><small><?= h($b['marca'] . ' ' . $b['modelo']) ?></small></td>
-                    <td><?= h($b['numero_serie'] ?: '—') ?></td>
-                    <td><?= h($b['numero_inventario'] ?: '—') ?></td>
+                    <td>
+                        <strong><?= h($b['tipo_equipo']) ?></strong>
+                        <?= h(trim($b['marca'] . ' ' . $b['modelo'])) ?>
+                    </td>
+                    <td>
+                        <?= h($b['numero_inventario'] ? 'Inv. ' . $b['numero_inventario'] : 'Sin inventario') ?>
+                        <small><?= h($b['numero_serie'] ? 'Serie ' . $b['numero_serie'] : 'Sin serie') ?></small>
+                    </td>
                     <td>
                         <div class="btn-row">
-                            <a class="btn btn-sm btn-primary" href="<?= h(url('bien.php?id=' . $b['id'])) ?>">Historial</a>
-                            <a class="btn btn-sm btn-ok" href="<?= h(url('recibir.php?bien=' . $b['id'] . '&persona=' . $id)) ?>">Nuevo servicio</a>
+                            <a class="btn btn-sm btn-primary" href="<?= h(url('bien.php?id=' . $b['id'])) ?>">Ver</a>
+                            <a class="btn btn-sm btn-ok" href="<?= h(url('recibir.php?bien=' . $b['id'] . '&persona=' . $id)) ?>">Servicio</a>
                         </div>
                     </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
         </table>
+        </div>
     <?php endif; ?>
 </section>
 
-<section class="section">
+<section class="card">
     <div class="section-head">
-        <span class="section-num">3</span>
         <div>
             <h2>Servicios</h2>
-            <p class="hint">Folios en los que esta persona entregó equipo.</p>
+            <p class="hint">Folios en los que entregó equipo.</p>
         </div>
     </div>
     <?php if (!$servicios): ?>
-        <p class="lead">Sin servicios registrados.</p>
+        <p class="empty-state">Sin servicios registrados.</p>
     <?php else: ?>
-        <table>
+        <div class="table-wrap">
+        <table class="inv-table">
             <thead>
                 <tr>
                     <th>Folio</th>
                     <th>Equipo</th>
-                    <th>Recepción</th>
-                    <th>Estado</th>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
             <?php foreach ($servicios as $eq): ?>
                 <tr>
-                    <td><strong><?= h($eq['folio']) ?></strong></td>
+                    <td>
+                        <a href="<?= h(url('equipo.php?id=' . $eq['id'])) ?>"><strong><?= h($eq['folio']) ?></strong></a>
+                        <span class="badge st-<?= h($eq['estado']) ?>"><?= h(estadoLabel($eq['estado'])) ?></span>
+                        <small><?= h(formatFecha($eq['fecha_recepcion'], true)) ?></small>
+                    </td>
                     <td><?= h($eq['tipo_equipo'] . ' · ' . $eq['marca'] . ' ' . $eq['modelo']) ?></td>
-                    <td><?= h(formatFecha($eq['fecha_recepcion'], true)) ?></td>
-                    <td><span class="badge st-<?= h($eq['estado']) ?>"><?= h(estadoLabel($eq['estado'])) ?></span></td>
                     <td>
                         <a class="btn btn-sm btn-primary" href="<?= h(url('equipo.php?id=' . $eq['id'])) ?>">Ver</a>
                     </td>
@@ -149,6 +158,7 @@ require __DIR__ . '/includes/header.php';
             <?php endforeach; ?>
             </tbody>
         </table>
+        </div>
     <?php endif; ?>
 </section>
 </div>

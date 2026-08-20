@@ -26,23 +26,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $q = trim($_GET['q'] ?? '');
-$personas = listPersonas($pdo, $q);
+$area = trim($_GET['area'] ?? '');
+$personas = listPersonas($pdo, $q, $area);
+$areas = listPersonasAreas($pdo);
+$hayFiltros = $q !== '' || $area !== '';
+$mostrarAlta = $errors !== [];
 $pageTitle = 'Personas';
 require __DIR__ . '/includes/header.php';
 ?>
-<div class="topbar">
+<div class="page-head">
     <div>
         <p class="eyebrow"><?= h(ORG_SHORT) ?> · Directorio</p>
         <h1>Personas</h1>
-        <p class="lead">Perfiles de quienes entregan equipos. Sirven para no recapturar datos y ver su historial.</p>
     </div>
+    <button class="btn btn-ok" type="button" data-toggle-panel="#alta-persona">+ Registrar</button>
 </div>
 
 <?php foreach ($errors as $err): ?>
     <div class="alert alert-error"><?= h($err) ?></div>
 <?php endforeach; ?>
 
-<section class="section" style="margin-bottom:16px">
+<section class="card ppl-alta" id="alta-persona" <?= $mostrarAlta ? '' : 'hidden' ?>>
     <div class="section-head">
         <span class="section-num">+</span>
         <div>
@@ -50,63 +54,94 @@ require __DIR__ . '/includes/header.php';
             <p class="hint">Si el nombre ya existe, se actualiza el perfil.</p>
         </div>
     </div>
-    <form method="post" class="grid-3">
+    <form method="post" class="ppl-form-grid">
         <?= csrfField() ?>
         <div class="field">
             <label>Nombre <span class="req">*</span></label>
-            <input name="nombre" required value="<?= h($_POST['nombre'] ?? '') ?>">
+            <input name="nombre" required value="<?= h($_POST['nombre'] ?? '') ?>" placeholder="Nombre completo">
         </div>
         <div class="field">
             <label>Área / dependencia</label>
-            <input name="area_dependencia" value="<?= h($_POST['area_dependencia'] ?? '') ?>">
+            <input name="area_dependencia" value="<?= h($_POST['area_dependencia'] ?? '') ?>" placeholder="Plantel, área o departamento">
         </div>
         <div class="field">
             <label>Teléfono</label>
-            <input name="telefono" value="<?= h($_POST['telefono'] ?? '') ?>">
+            <input name="telefono" value="<?= h($_POST['telefono'] ?? '') ?>" placeholder="Opcional">
         </div>
-        <div class="field" style="justify-content:end">
-            <label>&nbsp;</label>
-            <button class="btn btn-ok" type="submit">Guardar perfil</button>
-        </div>
+        <button class="btn btn-ok" type="submit">Guardar</button>
     </form>
 </section>
 
 <section class="card">
-    <form class="toolbar" method="get">
-        <input type="search" name="q" value="<?= h($q) ?>" placeholder="Nombre, área o teléfono">
+    <form method="get" class="inv-bar" style="margin-bottom:12px">
+        <input type="search" name="q" value="<?= h($q) ?>" placeholder="Buscar nombre, área o teléfono">
+        <select name="area">
+            <option value="">Todas las áreas</option>
+            <?php foreach ($areas as $a): ?>
+                <option value="<?= h($a) ?>" <?= $area === $a ? 'selected' : '' ?>><?= h($a) ?></option>
+            <?php endforeach; ?>
+        </select>
         <button class="btn btn-primary" type="submit">Buscar</button>
+        <?php if ($hayFiltros): ?>
+            <a class="btn btn-ghost" href="<?= h(url('personas.php')) ?>">Quitar</a>
+        <?php endif; ?>
     </form>
-    <table>
+
+    <div class="table-wrap">
+    <table class="inv-table ppl-table">
         <thead>
             <tr>
                 <th>Persona</th>
-                <th>Área</th>
-                <th>Teléfono</th>
-                <th>Equipos</th>
-                <th>Servicios</th>
+                <th>Contacto</th>
+                <th>Actividad</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
         <?php if (!$personas): ?>
-            <tr><td colspan="6">Aún no hay perfiles. Se crean al recibir un equipo o con el formulario de arriba.</td></tr>
+            <tr>
+                <td colspan="4">
+                    <div class="empty-state">
+                        <?= $hayFiltros ? 'Ningún perfil coincide con la búsqueda.' : 'Aún no hay perfiles. Se crean al recibir un equipo o con Registrar.' ?>
+                    </div>
+                </td>
+            </tr>
         <?php endif; ?>
         <?php foreach ($personas as $p): ?>
+            <?php
+            $equipos = (int) ($p['equipos'] ?? 0);
+            $servicios = (int) ($p['servicios'] ?? 0);
+            ?>
             <tr>
-                <td><strong><?= h($p['nombre']) ?></strong></td>
-                <td><?= h($p['area_dependencia'] ?: '—') ?></td>
-                <td><?= h($p['telefono'] ?: '—') ?></td>
-                <td><?= (int) $p['equipos'] ?></td>
-                <td><?= (int) $p['servicios'] ?></td>
+                <td>
+                    <div class="ppl-person">
+                        <span class="ppl-avatar"><?= h(nombreIniciales($p['nombre'] ?? '')) ?></span>
+                        <div>
+                            <strong><?= h($p['nombre']) ?></strong>
+                            <small><?= h($p['area_dependencia'] ?: 'Sin área') ?></small>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <?= h($p['telefono'] ?: 'Sin teléfono') ?>
+                </td>
+                <td>
+                    <?= $equipos === 1 ? '1 equipo' : $equipos . ' equipos' ?>
+                    · <?= $servicios === 1 ? '1 servicio' : $servicios . ' servicios' ?>
+                    <?php if (!empty($p['ultimo_servicio'])): ?>
+                        <small>Último ingreso <?= h(formatFecha($p['ultimo_servicio'], true)) ?></small>
+                    <?php endif; ?>
+                </td>
                 <td>
                     <div class="btn-row">
-                        <a class="btn btn-sm btn-primary" href="<?= h(url('persona.php?id=' . $p['id'])) ?>">Ver perfil</a>
-                        <a class="btn btn-sm btn-ok" href="<?= h(url('recibir.php?persona=' . $p['id'])) ?>">Recibir equipo</a>
+                        <a class="btn btn-sm btn-primary" href="<?= h(url('persona.php?id=' . $p['id'])) ?>">Ver</a>
+                        <a class="btn btn-sm btn-ok" href="<?= h(url('recibir.php?persona=' . $p['id'])) ?>">Recibir</a>
                     </div>
                 </td>
             </tr>
         <?php endforeach; ?>
         </tbody>
     </table>
+    </div>
 </section>
 <?php require __DIR__ . '/includes/footer.php'; ?>

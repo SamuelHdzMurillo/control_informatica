@@ -23,22 +23,15 @@ $filters = [
 $bienes = listBienes($pdo, $q, $filters);
 $marcas = listBienesMarcas($pdo);
 $areas = listBienesAreas($pdo);
-$resumen = inventarioResumen($pdo);
 $hayFiltros = $q !== '' || $tipo !== '' || $marca !== '' || $area !== '' || $estado !== '' || $ident !== '' || $historial !== '';
 $nFiltros = (int) array_sum(array_map(static fn($v) => $v !== '' ? 1 : 0, [$tipo, $marca, $area, $estado, $ident, $historial]));
 $pageTitle = 'Inventario';
 require __DIR__ . '/includes/header.php';
 ?>
-<div class="topbar">
+<div class="page-head">
     <div>
         <p class="eyebrow"><?= h(ORG_SHORT) ?> · Bienes</p>
         <h1>Inventario de equipos</h1>
-        <p class="inv-summary">
-            <b><?= (int) $resumen['total'] ?></b> en catálogo
-            · <b class="n-orange"><?= (int) $resumen['en_soporte'] ?></b> en soporte
-            · <b><?= (int) $resumen['con_inventario'] ?></b> con inventario
-            · mostrando <?= count($bienes) ?>
-        </p>
     </div>
     <a class="btn btn-ok" href="<?= h(url('recibir.php')) ?>">+ Recibir equipo</a>
 </div>
