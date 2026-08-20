@@ -186,9 +186,61 @@ function tipoMantenimiento(string $tipoProblema): string
     return 'Reparación';
 }
 
-function puedeEmitirOrden(array $eq): bool
+function estadosOrdenServicio(): array
 {
-    return in_array($eq['estado'] ?? '', ['listo', 'entregado', 'no_reparable'], true);
+    return ['listo', 'entregado', 'no_reparable'];
+}
+
+function comentarioEsAutomatico(string $comentario): bool
+{
+    $comentario = trim($comentario);
+    return $comentario === '' || str_starts_with($comentario, 'El equipo pasó a:');
+}
+
+function getDiagnostico(PDO $pdo, array $eq): string
+{
+    $directo = trim((string) ($eq['diagnostico'] ?? ''));
+    if ($directo !== '') {
+        return $directo;
+    }
+    $stmt = $pdo->prepare(
+        "SELECT comentario FROM bitacora
+         WHERE equipo_id = ? AND estado = 'diagnostico'
+         ORDER BY id ASC"
+    );
+    $stmt->execute([(int) $eq['id']]);
+    $lineas = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $comentario = trim((string) ($row['comentario'] ?? ''));
+        if (comentarioEsAutomatico($comentario)) {
+            continue;
+        }
+        $lineas[] = $comentario;
+    }
+    return implode("\n\n", $lineas);
+}
+
+function faltantesOrden(PDO $pdo, array $eq): array
+{
+    $faltan = [];
+    $estado = (string) ($eq['estado'] ?? '');
+    if (!in_array($estado, estadosOrdenServicio(), true)) {
+        $faltan[] = 'Cambiar el estado a “Listo para entrega” (ahora está en “' . estadoLabel($estado) . '”).';
+    }
+    $diagnostico = getDiagnostico($pdo, $eq);
+    $trabajo = getTrabajoRealizado($pdo, $eq);
+    if ($estado === 'no_reparable' && $diagnostico === '') {
+        $faltan[] = 'Capturar el diagnóstico (por qué no se puede reparar).';
+    }
+    if (in_array($estado, ['listo', 'entregado'], true) && $trabajo === '') {
+        $faltan[] = 'Capturar el trabajo realizado. Ese dato se llena cuando el equipo ya está reparado (estado “En reparación” o “Listo para entrega”).';
+    }
+    return $faltan;
+}
+
+function puedeEmitirOrden(PDO $pdo, array $eq): bool
+{
+    return faltantesOrden($pdo, $eq) === [];
 }
 
 function columnExists(PDO $pdo, string $table, string $column): bool
@@ -214,6 +266,9 @@ function ensureEquipoSchema(PDO $pdo): void
 
     if (!columnExists($pdo, 'equipos', 'trabajo_realizado')) {
         $pdo->exec('ALTER TABLE equipos ADD COLUMN trabajo_realizado TEXT DEFAULT NULL AFTER observaciones');
+    }
+    if (!columnExists($pdo, 'equipos', 'diagnostico')) {
+        $pdo->exec('ALTER TABLE equipos ADD COLUMN diagnostico TEXT DEFAULT NULL AFTER trabajo_realizado');
     }
 
     $pdo->exec("
@@ -489,24 +544,25 @@ function getFechaOrden(PDO $pdo, array $eq): string
 
 function getTrabajoRealizado(PDO $pdo, array $eq): string
 {
+    $directo = trim((string) ($eq['trabajo_realizado'] ?? ''));
+    if ($directo !== '') {
+        return $directo;
+    }
     $stmt = $pdo->prepare(
         "SELECT comentario FROM bitacora
-         WHERE equipo_id = ? AND estado = 'reparacion'
+         WHERE equipo_id = ? AND estado IN ('reparacion', 'listo', 'no_reparable')
          ORDER BY id ASC"
     );
     $stmt->execute([(int) $eq['id']]);
     $lineas = [];
     foreach ($stmt->fetchAll() as $row) {
         $comentario = trim((string) ($row['comentario'] ?? ''));
-        if ($comentario === '' || $comentario === 'El equipo pasó a: En reparación') {
+        if (comentarioEsAutomatico($comentario)) {
             continue;
         }
         $lineas[] = $comentario;
     }
-    if ($lineas) {
-        return implode("\n\n", $lineas);
-    }
-    return trim((string) ($eq['trabajo_realizado'] ?? ''));
+    return implode("\n\n", $lineas);
 }
 
 function generateFolio(PDO $pdo): string
@@ -533,6 +589,68 @@ function requireLogin(): void
     if (!currentUser()) {
         redirect('login.php');
     }
+}
+
+function isAdmin(?array $user = null): bool
+{
+    $user = $user ?? currentUser();
+    return (($user['rol'] ?? '') === 'admin');
+}
+
+function requireAdmin(): void
+{
+    requireLogin();
+    if (!isAdmin()) {
+        flash('error', 'Solo el administrador puede entrar a esta sección.');
+        redirect('dashboard.php');
+    }
+}
+
+function listUsuarios(PDO $pdo): array
+{
+    return $pdo->query(
+        'SELECT id, nombre, usuario, rol, created_at FROM usuarios ORDER BY rol ASC, nombre ASC'
+    )->fetchAll();
+}
+
+function saveTecnico(PDO $pdo, string $nombre, string $usuario, string $password): int
+{
+    $nombre = trim($nombre);
+    $usuario = strtolower(trim($usuario));
+    if ($nombre === '') {
+        throw new RuntimeException('El nombre del técnico es obligatorio.');
+    }
+    if (!preg_match('/^[a-z0-9_]{3,60}$/', $usuario)) {
+        throw new RuntimeException('El usuario debe tener de 3 a 60 caracteres: letras, números o guion bajo, sin espacios.');
+    }
+    if (strlen($password) < 6) {
+        throw new RuntimeException('La contraseña debe tener al menos 6 caracteres.');
+    }
+    $check = $pdo->prepare('SELECT id FROM usuarios WHERE usuario = ?');
+    $check->execute([$usuario]);
+    if ($check->fetch()) {
+        throw new RuntimeException('Ese nombre de usuario ya existe.');
+    }
+    $stmt = $pdo->prepare('INSERT INTO usuarios (nombre, usuario, password, rol) VALUES (?, ?, ?, ?)');
+    $stmt->execute([$nombre, $usuario, password_hash($password, PASSWORD_DEFAULT), 'tecnico']);
+    return (int) $pdo->lastInsertId();
+}
+
+function resetUsuarioPassword(PDO $pdo, int $id, string $password): void
+{
+    if ($id < 1) {
+        throw new RuntimeException('El usuario no existe.');
+    }
+    if (strlen($password) < 6) {
+        throw new RuntimeException('La contraseña debe tener al menos 6 caracteres.');
+    }
+    $stmt = $pdo->prepare('SELECT id FROM usuarios WHERE id = ?');
+    $stmt->execute([$id]);
+    if (!$stmt->fetch()) {
+        throw new RuntimeException('El usuario no existe.');
+    }
+    $upd = $pdo->prepare('UPDATE usuarios SET password = ? WHERE id = ?');
+    $upd->execute([password_hash($password, PASSWORD_DEFAULT), $id]);
 }
 
 function ensureUploadDirs(): void

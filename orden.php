@@ -10,8 +10,9 @@ if (!$eq) {
     flash('error', 'El equipo no existe.');
     redirect('dashboard.php');
 }
-if (!puedeEmitirOrden($eq)) {
-    flash('error', 'La orden de servicio se emite cuando el equipo está listo para entrega.');
+$faltanOrden = faltantesOrden($pdo, $eq);
+if ($faltanOrden) {
+    flash('error', 'No se puede emitir la orden. Falta: ' . implode(' ', $faltanOrden));
     redirect('equipo.php?id=' . $id);
 }
 
@@ -19,6 +20,7 @@ $fotos = getFotos($pdo, $id);
 $tecnico = getTecnicoOrden($pdo, $id);
 $fechaOrden = getFechaOrden($pdo, $eq);
 $trabajoRealizado = getTrabajoRealizado($pdo, $eq);
+$diagnostico = getDiagnostico($pdo, $eq);
 $recibeNombre = $eq['entregado_a'] ?: $eq['entregado_por'];
 $recibeDato = $eq['telefono'] ?: ($eq['area_dependencia'] ?: '');
 $equipoLinea = trim($eq['marca'] . ' ' . $eq['modelo']);
@@ -284,6 +286,13 @@ $equipoLinea = trim($eq['marca'] . ' ' . $eq['modelo']);
             <div class="campo"><label>Tipo de mantenimiento</label><span class="valor"><?= h(tipoMantenimiento($eq['tipo_problema'])) ?></span></div>
             <div class="campo"><label>Problema reportado</label><span class="valor"><?= h($eq['problema_reportado']) ?></span></div>
             <div class="campo ancho"><label>Descripción del problema</label><span class="valor caja"><?= h($eq['descripcion_falla'] ?: $eq['problema_reportado']) ?></span></div>
+        </div>
+    </section>
+
+    <section class="seccion">
+        <h2>Diagnóstico</h2>
+        <div class="campo">
+            <span class="valor caja"><?= h($diagnostico !== '' ? $diagnostico : 'Sin diagnóstico capturado.') ?></span>
         </div>
     </section>
 

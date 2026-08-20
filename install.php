@@ -114,6 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     accesorios TEXT DEFAULT NULL,
                     observaciones TEXT DEFAULT NULL,
                     trabajo_realizado TEXT DEFAULT NULL,
+                    diagnostico TEXT DEFAULT NULL,
                     oficio_path VARCHAR(255) DEFAULT NULL,
                     estado VARCHAR(40) NOT NULL DEFAULT 'recibido',
                     recibido_por VARCHAR(120) DEFAULT NULL,
