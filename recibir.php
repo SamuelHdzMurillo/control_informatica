@@ -256,7 +256,7 @@ require __DIR__ . '/includes/header.php';
                 <label>Fecha de recepción</label>
                 <input type="datetime-local" name="fecha_recepcion" value="<?= h($old['fecha_recepcion'] ?? date('Y-m-d\TH:i')) ?>">
             </div>
-            <div class="field" data-persona-nueva <?= (($old['persona_id'] ?? '') === 'nueva') ? '' : 'hidden' ?>>
+            <div class="field" id="campo-persona-nueva" data-persona-nueva <?= (($old['persona_id'] ?? '') === 'nueva') ? '' : 'hidden' ?> style="<?= (($old['persona_id'] ?? '') === 'nueva') ? '' : 'display:none' ?>">
                 <label>Nombre de la persona nueva <span class="req">*</span></label>
                 <input name="entregado_por" id="entregado_por" value="<?= h($old['entregado_por'] ?? '') ?>" <?= (($old['persona_id'] ?? '') === 'nueva') ? 'required' : '' ?>>
             </div>
@@ -270,6 +270,70 @@ require __DIR__ . '/includes/header.php';
             </div>
         </div>
     </section>
+    <script>
+    (function () {
+        var personas = [];
+        try {
+            var raw = document.getElementById('data-personas');
+            personas = raw ? JSON.parse(raw.textContent || '[]') : [];
+        } catch (e) {
+            personas = [];
+        }
+        var sel = document.getElementById('persona_id');
+        var wrap = document.getElementById('campo-persona-nueva');
+        var nombre = document.getElementById('entregado_por');
+        var area = document.getElementById('area_dependencia');
+        var tel = document.getElementById('telefono');
+        if (!sel) return;
+
+        function datoOpcion(opt, clave, attr) {
+            if (!opt) return '';
+            var fromDs = opt.dataset ? (opt.dataset[clave] || '') : '';
+            return fromDs || opt.getAttribute(attr) || '';
+        }
+
+        function syncPersona(fromChange) {
+            var valor = sel.value;
+            var esNueva = valor === 'nueva';
+            if (wrap) {
+                wrap.hidden = !esNueva;
+                wrap.style.display = esNueva ? '' : 'none';
+            }
+            if (nombre) nombre.required = esNueva;
+
+            if (esNueva) {
+                if (fromChange) {
+                    if (nombre) nombre.value = '';
+                    if (area) area.value = '';
+                    if (tel) tel.value = '';
+                }
+                return;
+            }
+
+            if (nombre) nombre.value = '';
+            if (valor === '') {
+                if (area) area.value = '';
+                if (tel) tel.value = '';
+                return;
+            }
+
+            var p = null;
+            for (var i = 0; i < personas.length; i++) {
+                if (String(personas[i].id) === String(valor)) {
+                    p = personas[i];
+                    break;
+                }
+            }
+            var opt = sel.options[sel.selectedIndex];
+            if (area) area.value = (p && p.area) || datoOpcion(opt, 'area', 'data-area');
+            if (tel) tel.value = (p && p.telefono) || datoOpcion(opt, 'telefono', 'data-telefono');
+        }
+
+        sel.addEventListener('change', function () { syncPersona(true); });
+        sel.addEventListener('input', function () { syncPersona(true); });
+        syncPersona(false);
+    })();
+    </script>
 
     <section class="section">
         <div class="section-head">

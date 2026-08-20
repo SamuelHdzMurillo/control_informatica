@@ -46,29 +46,51 @@ document.addEventListener('DOMContentLoaded', () => {
         if (areaInput) areaInput.value = p.area || '';
         if (telInput) telInput.value = p.telefono || '';
         if (personaNueva) personaNueva.hidden = true;
-        if (entregadoPor) entregadoPor.required = false;
+        if (entregadoPor) {
+            entregadoPor.required = false;
+            entregadoPor.value = '';
+        }
     };
 
-    const syncPersona = () => {
+    const datoPersona = (id) => personas.find((x) => String(x.id) === String(id));
+
+    const syncPersona = (fromChange = false) => {
         if (!personaSelect) return;
-        const opt = personaSelect.selectedOptions[0];
-        const esNueva = personaSelect.value === 'nueva';
-        if (personaNueva) personaNueva.hidden = !esNueva;
+        const opt = personaSelect.options[personaSelect.selectedIndex];
+        const valor = personaSelect.value;
+        const esNueva = valor === 'nueva';
+        if (personaNueva) {
+            personaNueva.hidden = !esNueva;
+            personaNueva.style.display = esNueva ? '' : 'none';
+        }
         if (entregadoPor) entregadoPor.required = esNueva;
-        if (esNueva || personaSelect.value === '') {
-            if (esNueva) return;
+
+        if (esNueva) {
+            if (fromChange) {
+                if (entregadoPor) entregadoPor.value = '';
+                if (areaInput) areaInput.value = '';
+                if (telInput) telInput.value = '';
+            }
+            return;
+        }
+
+        if (entregadoPor) entregadoPor.value = '';
+        if (valor === '') {
             if (areaInput) areaInput.value = '';
             if (telInput) telInput.value = '';
             return;
         }
-        if (opt) {
-            if (areaInput) areaInput.value = opt.dataset.area || '';
-            if (telInput) telInput.value = opt.dataset.telefono || '';
+        const p = datoPersona(valor);
+        if (areaInput) {
+            areaInput.value = (p && p.area) || (opt && (opt.dataset.area || opt.getAttribute('data-area'))) || '';
+        }
+        if (telInput) {
+            telInput.value = (p && p.telefono) || (opt && (opt.dataset.telefono || opt.getAttribute('data-telefono'))) || '';
         }
     };
 
-    personaSelect?.addEventListener('change', syncPersona);
-    syncPersona();
+    personaSelect?.addEventListener('change', () => syncPersona(true));
+    syncPersona(false);
 
     const fillBien = (b) => {
         if (!b) return;

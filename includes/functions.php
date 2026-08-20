@@ -19,7 +19,13 @@ function url(string $path = ''): string
 
 function asset(string $path): string
 {
-    return url('assets/' . ltrim($path, '/'));
+    $rel = 'assets/' . ltrim($path, '/');
+    $url = url($rel);
+    $file = BASE_PATH . '/' . $rel;
+    if (is_file($file)) {
+        $url .= '?v=' . filemtime($file);
+    }
+    return $url;
 }
 
 function logoUrl(): string
