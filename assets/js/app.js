@@ -94,16 +94,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const fillBien = (b) => {
         if (!b) return;
-        const set = (id, val) => {
-            const el = document.getElementById(id);
-            if (el) el.value = val || '';
-        };
-        set('bien_id', b.id);
-        set('tipo_equipo', b.tipo);
-        set('marca', b.marca);
-        set('modelo', b.modelo);
-        set('numero_serie', b.serie);
-        set('numero_inventario', b.inventario);
+        if (typeof window.llenarEquipoRecibir === 'function') {
+            window.llenarEquipoRecibir(b);
+        } else {
+            const set = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.value = val || '';
+            };
+            set('bien_id', b.id);
+            set('tipo_equipo', b.tipo);
+            set('marca', b.marca);
+            set('modelo', b.modelo);
+            set('numero_serie', b.serie);
+            set('numero_inventario', b.inventario);
+        }
         const bienEstado = document.querySelector('[data-bien-estado]');
         if (bienEstado) bienEstado.textContent = 'Equipo del inventario seleccionado';
         document.querySelectorAll('[data-suggest-box-bien], [data-suggest-box-bien-inv]').forEach((el) => {
@@ -142,10 +146,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const list = document.querySelector(boxSelector);
         if (!el || !list) return;
         el.addEventListener('input', () => {
-            const bienId = document.getElementById('bien_id');
-            if (bienId) bienId.value = '';
-            const bienEstado = document.querySelector('[data-bien-estado]');
-            if (bienEstado) bienEstado.textContent = 'Se creará el perfil del equipo';
             const q = el.value.trim().toLowerCase();
             if (q.length < 2) {
                 list.hidden = true;

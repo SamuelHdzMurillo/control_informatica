@@ -29,7 +29,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $estadoFisico = trim($_POST['estado_fisico'] ?? '');
     $accesorios = trim($_POST['accesorios'] ?? '');
     $observaciones = trim($_POST['observaciones'] ?? '');
-    $bienId = (int) ($_POST['bien_id'] ?? 0);
+    $bienSel = (string) ($_POST['bien_id'] ?? '');
+    $bienId = 0;
     $personaId = 0;
     $entregadoPor = '';
 
@@ -56,9 +57,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Seleccione quién entrega el equipo.';
     }
 
-    if ($marca === '') $errors[] = 'La marca es obligatoria.';
-    if ($modelo === '') $errors[] = 'El modelo es obligatorio.';
-    if ($tipoEquipo === '') $errors[] = 'El tipo de equipo es obligatorio.';
+    if ($bienSel === 'nuevo') {
+        $bienId = 0;
+    } elseif ($bienSel !== '' && ctype_digit($bienSel)) {
+        $bienId = (int) $bienSel;
+        $perfilBien = getBien($pdo, $bienId);
+        if (!$perfilBien) {
+            $errors[] = 'El equipo seleccionado no existe.';
+            $bienId = 0;
+        } else {
+            if ($tipoEquipo === '') $tipoEquipo = (string) ($perfilBien['tipo_equipo'] ?? '');
+            if ($marca === '') $marca = (string) ($perfilBien['marca'] ?? '');
+            if ($modelo === '') $modelo = (string) ($perfilBien['modelo'] ?? '');
+            if ($numeroSerie === '') $numeroSerie = (string) ($perfilBien['numero_serie'] ?? '');
+            if ($numeroInventario === '') $numeroInventario = (string) ($perfilBien['numero_inventario'] ?? '');
+        }
+    } else {
+        $errors[] = 'Seleccione el equipo o registre uno nuevo.';
+    }
+
+    if ($bienSel === 'nuevo' || ($bienSel !== '' && ctype_digit($bienSel))) {
+        if ($marca === '') $errors[] = 'La marca es obligatoria.';
+        if ($modelo === '') $errors[] = 'El modelo es obligatorio.';
+        if ($tipoEquipo === '') $errors[] = 'El tipo de equipo es obligatorio.';
+    }
     if ($problema === '') $errors[] = 'El problema reportado es obligatorio.';
     if ($tipoProblema === '') $errors[] = 'El tipo de problema es obligatorio.';
     if ($descripcion === '') $errors[] = 'La descripción de la falla es obligatoria.';
@@ -193,6 +215,7 @@ $personasJson = array_map(static function (array $p): array {
         'telefono' => $p['telefono'] ?? '',
     ];
 }, $personas);
+$bienes = listBienes($pdo);
 $bienesJson = array_map(static function (array $b): array {
     return [
         'id' => (int) $b['id'],
@@ -204,7 +227,7 @@ $bienesJson = array_map(static function (array $b): array {
         'persona' => $b['persona_nombre'] ?? '',
         'persona_id' => (int) ($b['persona_id'] ?? 0),
     ];
-}, listBienes($pdo));
+}, $bienes);
 
 $pageTitle = 'Recibir equipo';
 require __DIR__ . '/includes/header.php';
@@ -226,7 +249,6 @@ require __DIR__ . '/includes/header.php';
 
 <form method="post" enctype="multipart/form-data" class="sections">
     <?= csrfField() ?>
-    <input type="hidden" name="bien_id" id="bien_id" value="<?= h((string) ($old['bien_id'] ?? '')) ?>">
 
     <section class="section">
         <div class="section-head">
@@ -340,40 +362,184 @@ require __DIR__ . '/includes/header.php';
             <span class="section-num">2</span>
             <div>
                 <h2>Identificación del equipo</h2>
-                <p class="hint">Busque por serie o inventario para traer el historial del mismo bien. Si es la primera vez, se crea el perfil del equipo.</p>
+                <p class="hint">Seleccione un equipo dado de alta. Si no está en la lista, elija “Registrar equipo nuevo”.</p>
             </div>
         </div>
         <div class="grid-3">
-            <div class="field">
+            <div class="field field-span">
+                <label>Equipo <span class="req">*</span></label>
+                <select name="bien_id" id="bien_id" required data-bien-select>
+                    <option value="">Seleccione</option>
+                    <?php foreach ($bienes as $b): ?>
+                        <?php
+                        $bienEtiqueta = trim(($b['marca'] ?? '') . ' ' . ($b['modelo'] ?? ''));
+                        if (!empty($b['tipo_equipo'])) $bienEtiqueta .= ' · ' . $b['tipo_equipo'];
+                        if (!empty($b['numero_serie'])) $bienEtiqueta .= ' · Serie ' . $b['numero_serie'];
+                        if (!empty($b['numero_inventario'])) $bienEtiqueta .= ' · Inv. ' . $b['numero_inventario'];
+                        ?>
+                        <option
+                            value="<?= (int) $b['id'] ?>"
+                            data-tipo="<?= h($b['tipo_equipo'] ?? '') ?>"
+                            data-marca="<?= h($b['marca'] ?? '') ?>"
+                            data-modelo="<?= h($b['modelo'] ?? '') ?>"
+                            data-serie="<?= h($b['numero_serie'] ?? '') ?>"
+                            data-inventario="<?= h($b['numero_inventario'] ?? '') ?>"
+                            data-persona-id="<?= (int) ($b['persona_id'] ?? 0) ?>"
+                            <?= ((string) ($old['bien_id'] ?? '') === (string) $b['id']) ? 'selected' : '' ?>
+                        ><?= h($bienEtiqueta) ?></option>
+                    <?php endforeach; ?>
+                    <option value="nuevo" <?= (($old['bien_id'] ?? '') === 'nuevo') ? 'selected' : '' ?>>+ Registrar equipo nuevo</option>
+                </select>
+                <small class="chip-sel" data-bien-estado><?php
+                    if (($old['bien_id'] ?? '') === 'nuevo') {
+                        echo 'Se creará el perfil del equipo';
+                    } elseif (!empty($old['bien_id'])) {
+                        echo 'Equipo del inventario seleccionado';
+                    }
+                ?></small>
+            </div>
+            <?php
+            $mostrarCamposBien = (($old['bien_id'] ?? '') === 'nuevo') || (isset($old['bien_id']) && $old['bien_id'] !== '' && $old['bien_id'] !== '0');
+            ?>
+            <div class="field" data-equipo-campos <?= $mostrarCamposBien ? '' : 'hidden' ?> style="<?= $mostrarCamposBien ? '' : 'display:none' ?>">
                 <label>Tipo de equipo <span class="req">*</span></label>
-                <select name="tipo_equipo" id="tipo_equipo" required>
+                <select name="tipo_equipo" id="tipo_equipo" <?= $mostrarCamposBien ? 'required' : '' ?>>
                     <option value="">Seleccione</option>
                     <?php foreach (tiposEquipo() as $t): ?>
                         <option <?= (($old['tipo_equipo'] ?? '') === $t) ? 'selected' : '' ?>><?= h($t) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="field">
+            <div class="field" data-equipo-campos <?= $mostrarCamposBien ? '' : 'hidden' ?> style="<?= $mostrarCamposBien ? '' : 'display:none' ?>">
                 <label>Marca <span class="req">*</span></label>
-                <input name="marca" id="marca" required value="<?= h($old['marca'] ?? '') ?>">
+                <input name="marca" id="marca" <?= $mostrarCamposBien ? 'required' : '' ?> value="<?= h($old['marca'] ?? '') ?>">
             </div>
-            <div class="field">
+            <div class="field" data-equipo-campos <?= $mostrarCamposBien ? '' : 'hidden' ?> style="<?= $mostrarCamposBien ? '' : 'display:none' ?>">
                 <label>Modelo <span class="req">*</span></label>
-                <input name="modelo" id="modelo" required value="<?= h($old['modelo'] ?? '') ?>">
+                <input name="modelo" id="modelo" <?= $mostrarCamposBien ? 'required' : '' ?> value="<?= h($old['modelo'] ?? '') ?>">
             </div>
-            <div class="field suggest-wrap">
+            <div class="field suggest-wrap" data-equipo-campos <?= $mostrarCamposBien ? '' : 'hidden' ?> style="<?= $mostrarCamposBien ? '' : 'display:none' ?>">
                 <label>Número de serie</label>
                 <input name="numero_serie" id="numero_serie" autocomplete="off" value="<?= h($old['numero_serie'] ?? '') ?>" data-suggest-bien="serie">
                 <div class="suggest-box" data-suggest-box-bien hidden></div>
             </div>
-            <div class="field suggest-wrap">
+            <div class="field suggest-wrap" data-equipo-campos <?= $mostrarCamposBien ? '' : 'hidden' ?> style="<?= $mostrarCamposBien ? '' : 'display:none' ?>">
                 <label>Número de inventario</label>
                 <input name="numero_inventario" id="numero_inventario" autocomplete="off" value="<?= h($old['numero_inventario'] ?? '') ?>" data-suggest-bien="inventario">
                 <div class="suggest-box" data-suggest-box-bien-inv hidden></div>
-                <small class="chip-sel" data-bien-estado><?= !empty($old['bien_id']) ? 'Equipo del inventario seleccionado' : 'Se creará el perfil del equipo' ?></small>
             </div>
         </div>
     </section>
+    <script>
+    (function () {
+        var bienes = [];
+        try {
+            var rawBienes = document.getElementById('data-bienes');
+            bienes = rawBienes ? JSON.parse(rawBienes.textContent || '[]') : [];
+        } catch (e) {
+            bienes = [];
+        }
+        var sel = document.getElementById('bien_id');
+        var campos = document.querySelectorAll('[data-equipo-campos]');
+        var tipo = document.getElementById('tipo_equipo');
+        var marca = document.getElementById('marca');
+        var modelo = document.getElementById('modelo');
+        var serie = document.getElementById('numero_serie');
+        var inventario = document.getElementById('numero_inventario');
+        var estado = document.querySelector('[data-bien-estado]');
+        if (!sel) return;
+
+        function setVal(el, val) {
+            if (el) el.value = val || '';
+        }
+
+        function mostrarCampos(visible, requeridos) {
+            for (var i = 0; i < campos.length; i++) {
+                campos[i].hidden = !visible;
+                campos[i].style.display = visible ? '' : 'none';
+            }
+            if (tipo) tipo.required = requeridos;
+            if (marca) marca.required = requeridos;
+            if (modelo) modelo.required = requeridos;
+        }
+
+        function llenarDeBien(b) {
+            if (!b) return;
+            setVal(tipo, b.tipo);
+            setVal(marca, b.marca);
+            setVal(modelo, b.modelo);
+            setVal(serie, b.serie);
+            setVal(inventario, b.inventario);
+            if (b.persona_id) {
+                var personaSel = document.getElementById('persona_id');
+                if (personaSel && !personaSel.value) {
+                    personaSel.value = String(b.persona_id);
+                    personaSel.dispatchEvent(new Event('change'));
+                }
+            }
+        }
+
+        function syncBien(fromChange) {
+            var valor = sel.value;
+            var esNuevo = valor === 'nuevo';
+            var haySel = valor !== '' && !esNuevo;
+
+            if (esNuevo) {
+                mostrarCampos(true, true);
+                if (estado) estado.textContent = 'Se creará el perfil del equipo';
+                if (fromChange) {
+                    setVal(tipo, '');
+                    setVal(marca, '');
+                    setVal(modelo, '');
+                    setVal(serie, '');
+                    setVal(inventario, '');
+                }
+                return;
+            }
+
+            if (!haySel) {
+                mostrarCampos(false, false);
+                if (estado) estado.textContent = '';
+                setVal(tipo, '');
+                setVal(marca, '');
+                setVal(modelo, '');
+                setVal(serie, '');
+                setVal(inventario, '');
+                return;
+            }
+
+            mostrarCampos(true, true);
+            if (estado) estado.textContent = 'Equipo del inventario seleccionado';
+
+            var b = null;
+            for (var i = 0; i < bienes.length; i++) {
+                if (String(bienes[i].id) === String(valor)) {
+                    b = bienes[i];
+                    break;
+                }
+            }
+            var opt = sel.options[sel.selectedIndex];
+            llenarDeBien(b || {
+                tipo: opt ? (opt.getAttribute('data-tipo') || '') : '',
+                marca: opt ? (opt.getAttribute('data-marca') || '') : '',
+                modelo: opt ? (opt.getAttribute('data-modelo') || '') : '',
+                serie: opt ? (opt.getAttribute('data-serie') || '') : '',
+                inventario: opt ? (opt.getAttribute('data-inventario') || '') : '',
+                persona_id: opt ? (opt.getAttribute('data-persona-id') || '') : ''
+            });
+        }
+
+        window.llenarEquipoRecibir = function (b) {
+            if (!b || !sel) return;
+            sel.value = String(b.id);
+            syncBien(false);
+        };
+
+        sel.addEventListener('change', function () { syncBien(true); });
+        sel.addEventListener('input', function () { syncBien(true); });
+        syncBien(false);
+    })();
+    </script>
 
     <section class="section">
         <div class="section-head">
