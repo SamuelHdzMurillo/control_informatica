@@ -51,6 +51,7 @@ img { max-width: 100%; }
     height: 100vh;
     overflow: hidden;
     transition: width .22s ease;
+    z-index: 21;
 }
 .brand {
     padding: 18px 16px 14px;
@@ -63,15 +64,42 @@ img { max-width: 100%; }
 .brand img { height: 52px; width: auto; display: block; margin: 0 auto; transition: height .22s ease; }
 
 .nav { padding: 12px 10px; flex: 1; overflow: auto; }
-.nav-section {
-    font-size: 11px;
-    letter-spacing: .12em;
-    text-transform: uppercase;
-    color: var(--muted);
-    padding: 12px 10px 6px;
+.nav-group { margin-bottom: 8px; }
+.nav-group-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #d7d7d7;
+    padding: 9px 12px;
+    border-radius: var(--radius);
+    margin-bottom: 3px;
+    font-size: 13px;
     font-weight: 700;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
     white-space: nowrap;
 }
+.nav-group-btn > svg { width: 18px; height: 18px; flex-shrink: 0; opacity: .9; }
+.nav-group-btn:hover { background: rgba(241,120,41,.12); color: var(--orange); }
+.nav-group.has-active > .nav-group-btn { color: var(--orange); }
+.nav-caret {
+    margin-left: auto;
+    display: grid;
+    place-items: center;
+    opacity: .7;
+    transition: transform .2s ease;
+}
+.nav-caret svg { width: 14px; height: 14px; }
+.nav-group.open > .nav-group-btn .nav-caret { transform: rotate(180deg); }
+.nav-group-items {
+    display: none;
+    padding: 2px 0 6px 8px;
+}
+.nav-group.open > .nav-group-items { display: block; }
 .nav a, .sidebar-collapse, .sidebar-foot .nav-logout {
     display: flex;
     align-items: center;
@@ -114,9 +142,39 @@ img { max-width: 100%; }
 }
 .sidebar-collapse { color: var(--muted); }
 html.nav-collapsed { --sidebar-w: 76px; }
-html.nav-collapsed .nav-section,
-html.nav-collapsed .nav-label { display: none; }
+html.nav-collapsed .sidebar,
+html.nav-collapsed .nav { overflow: visible; }
+html.nav-collapsed .nav-label,
+html.nav-collapsed .nav-caret { display: none; }
+html.nav-collapsed .nav-group { position: relative; }
+html.nav-collapsed .nav-group-items {
+    display: none;
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 0;
+    min-width: 210px;
+    padding: 8px;
+    background: #1a1a1a;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: 8px 12px 28px rgba(0,0,0,.45);
+    z-index: 50;
+}
+html.nav-collapsed .nav-group:hover > .nav-group-items,
+html.nav-collapsed .nav-group:focus-within > .nav-group-items {
+    display: block;
+}
+html.nav-collapsed .nav-group:hover > .nav-group-items .nav-label,
+html.nav-collapsed .nav-group:focus-within > .nav-group-items .nav-label {
+    display: inline;
+}
+html.nav-collapsed .nav-group:hover > .nav-group-items a,
+html.nav-collapsed .nav-group:focus-within > .nav-group-items a {
+    justify-content: flex-start;
+    padding: 9px 12px;
+}
 html.nav-collapsed .nav a,
+html.nav-collapsed .nav-group-btn,
 html.nav-collapsed .sidebar-collapse,
 html.nav-collapsed .sidebar-foot .nav-logout {
     justify-content: center;
@@ -870,9 +928,23 @@ td .btn-row { justify-content: flex-start; }
     }
     html.nav-open .sidebar { transform: translateX(0); }
     html.nav-collapsed { --sidebar-w: 248px; }
-    html.nav-collapsed .nav-section,
-    html.nav-collapsed .nav-label { display: block; }
+    html.nav-collapsed .sidebar { overflow: hidden; }
+    html.nav-collapsed .nav { overflow: auto; }
+    html.nav-collapsed .nav-label { display: inline; }
+    html.nav-collapsed .nav-caret { display: grid; }
+    html.nav-collapsed .nav-group { position: static; }
+    html.nav-collapsed .nav-group-items {
+        position: static;
+        min-width: 0;
+        padding: 2px 0 6px 8px;
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+    }
+    html.nav-collapsed .nav-group.open > .nav-group-items { display: block; }
+    html.nav-collapsed .nav-group:not(.open) > .nav-group-items { display: none; }
     html.nav-collapsed .nav a,
+    html.nav-collapsed .nav-group-btn,
     html.nav-collapsed .sidebar-collapse,
     html.nav-collapsed .sidebar-foot .nav-logout { justify-content: flex-start; padding: 9px 12px; }
     html.nav-collapsed .brand img { height: 52px; }

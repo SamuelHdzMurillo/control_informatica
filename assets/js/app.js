@@ -58,6 +58,40 @@ document.addEventListener('DOMContentLoaded', () => {
             syncNav();
         });
     });
+
+    const groups = [...document.querySelectorAll('[data-nav-group]')];
+    const saveGroups = () => {
+        const state = {};
+        groups.forEach((group) => {
+            state[group.dataset.navGroup] = group.classList.contains('open');
+        });
+        try { localStorage.setItem('nav-groups', JSON.stringify(state)); } catch (err) {}
+    };
+    const loadGroups = () => {
+        let saved = {};
+        try { saved = JSON.parse(localStorage.getItem('nav-groups') || '{}') || {}; } catch (err) {}
+        groups.forEach((group) => {
+            const key = group.dataset.navGroup;
+            const open = Object.prototype.hasOwnProperty.call(saved, key)
+                ? !!saved[key]
+                : true;
+            group.classList.toggle('open', open || group.classList.contains('has-active'));
+            const btn = group.querySelector('[data-toggle-group]');
+            btn?.setAttribute('aria-expanded', group.classList.contains('open') ? 'true' : 'false');
+        });
+    };
+    groups.forEach((group) => {
+        group.querySelector('[data-toggle-group]')?.addEventListener('click', () => {
+            if (html.classList.contains('nav-collapsed') && !window.matchMedia('(max-width: 980px)').matches) {
+                return;
+            }
+            group.classList.toggle('open');
+            const btn = group.querySelector('[data-toggle-group]');
+            btn?.setAttribute('aria-expanded', group.classList.contains('open') ? 'true' : 'false');
+            saveGroups();
+        });
+    });
+    loadGroups();
     syncNav();
 
     const userMenu = document.querySelector('[data-user-menu]');
