@@ -33,6 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $bienes = bienesDePersona($pdo, $id);
 $servicios = serviciosDePersona($pdo, $id);
+$prestamos = prestamosDePersona($pdo, $id);
+$prestamosActivos = array_values(array_filter($prestamos, static fn(array $p): bool => $p['estado'] === 'activo'));
 $pageTitle = $persona['nombre'];
 require __DIR__ . '/includes/header.php';
 ?>
@@ -48,6 +50,7 @@ require __DIR__ . '/includes/header.php';
     <div class="btn-row">
         <a class="btn btn-ghost" href="<?= h(url('personas.php')) ?>">Directorio</a>
         <button class="btn btn-ghost" type="button" data-toggle-panel="#editar-persona">Editar</button>
+        <a class="btn btn-ghost" href="<?= h(url('prestar.php?persona=' . $id)) ?>">Prestar material</a>
         <a class="btn btn-ok" href="<?= h(url('recibir.php?persona=' . $id)) ?>">+ Recibir equipo</a>
     </div>
 </div>
@@ -162,4 +165,63 @@ require __DIR__ . '/includes/header.php';
     <?php endif; ?>
 </section>
 </div>
+
+<?php
+$prestamosVencidosPersona = array_values(array_filter($prestamosActivos, static fn(array $p): bool => $p['estado_visual'] === 'vencido'));
+?>
+<?php if ($prestamosVencidosPersona): ?>
+    <div class="alert alert-error">
+        Esta persona tiene <?= count($prestamosVencidosPersona) === 1 ? 'un préstamo vencido' : count($prestamosVencidosPersona) . ' préstamos vencidos' ?> de informática.
+    </div>
+<?php endif; ?>
+
+<section class="card">
+    <div class="section-head">
+        <div>
+            <h2>Préstamos de informática</h2>
+            <p class="hint">Material interno que tiene o ha tenido a su cargo.</p>
+        </div>
+        <a class="btn btn-sm btn-ok" href="<?= h(url('prestar.php?persona=' . $id)) ?>">Prestar</a>
+    </div>
+    <?php if (!$prestamos): ?>
+        <p class="empty-state">Sin préstamos de inventario interno.</p>
+    <?php else: ?>
+        <div class="table-wrap">
+        <table class="inv-table">
+            <thead>
+                <tr>
+                    <th>Folio</th>
+                    <th>Periodo</th>
+                    <th>Bienes</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($prestamos as $p): ?>
+                <tr class="<?= $p['estado_visual'] === 'vencido' ? 'row-vencido' : ($p['estado_visual'] === 'vence_pronto' ? 'row-pronto' : '') ?>">
+                    <td>
+                        <a href="<?= h(url('prestamo.php?id=' . $p['id'])) ?>"><strong><?= h($p['folio']) ?></strong></a>
+                        <span class="badge st-<?= h($p['estado_visual']) ?>"><?= h($p['estado_visual_label']) ?></span>
+                    </td>
+                    <td>
+                        <?= h(formatFecha($p['fecha_prestamo'], true)) ?>
+                        <small>Hasta <?= h(formatFecha($p['fecha_compromiso'])) ?></small>
+                    </td>
+                    <td>
+                        <?= (int) $p['items_fuera'] ?> fuera
+                        <small>de <?= (int) $p['items_total'] ?></small>
+                    </td>
+                    <td>
+                        <div class="btn-row">
+                            <a class="btn btn-sm btn-primary" href="<?= h(url('prestamo.php?id=' . $p['id'])) ?>">Ver</a>
+                            <a class="btn btn-sm btn-ghost" href="<?= h(url('recibo_prestamo.php?id=' . $p['id'])) ?>">Recibí</a>
+                        </div>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        </div>
+    <?php endif; ?>
+</section>
 <?php require __DIR__ . '/includes/footer.php'; ?>

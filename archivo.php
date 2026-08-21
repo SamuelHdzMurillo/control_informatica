@@ -47,6 +47,18 @@ if ($tipo === 'foto') {
     sendStoredFile($ruta);
 }
 
+if ($tipo === 'foto_interno') {
+    $fid = (int) ($_GET['fid'] ?? 0);
+    $stmt = $pdo->prepare('SELECT ruta FROM fotos_internos WHERE id = ?');
+    $stmt->execute([$fid]);
+    $ruta = $stmt->fetchColumn();
+    if (!$ruta) {
+        http_response_code(404);
+        exit('Foto no encontrada');
+    }
+    sendStoredFile($ruta);
+}
+
 if ($tipo === 'oficio') {
     $id = (int) ($_GET['id'] ?? 0);
     $eq = getEquipo($pdo, $id);

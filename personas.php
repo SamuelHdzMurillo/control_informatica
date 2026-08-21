@@ -128,6 +128,12 @@ require __DIR__ . '/includes/header.php';
                 <td>
                     <?= $equipos === 1 ? '1 equipo' : $equipos . ' equipos' ?>
                     · <?= $servicios === 1 ? '1 servicio' : $servicios . ' servicios' ?>
+                    <?php
+                    $prestamosAct = (int) ($p['prestamos_activos'] ?? 0);
+                    if ($prestamosAct > 0):
+                    ?>
+                        · <?= $prestamosAct === 1 ? '1 préstamo activo' : $prestamosAct . ' préstamos activos' ?>
+                    <?php endif; ?>
                     <?php if (!empty($p['ultimo_servicio'])): ?>
                         <small>Último ingreso <?= h(formatFecha($p['ultimo_servicio'], true)) ?></small>
                     <?php endif; ?>
@@ -135,6 +141,7 @@ require __DIR__ . '/includes/header.php';
                 <td>
                     <div class="btn-row">
                         <a class="btn btn-sm btn-primary" href="<?= h(url('persona.php?id=' . $p['id'])) ?>">Ver</a>
+                        <a class="btn btn-sm btn-ghost" href="<?= h(url('prestar.php?persona=' . $p['id'])) ?>">Prestar</a>
                         <a class="btn btn-sm btn-ok" href="<?= h(url('recibir.php?persona=' . $p['id'])) ?>">Recibir</a>
                     </div>
                 </td>

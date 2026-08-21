@@ -14,9 +14,19 @@ $soportePages = [
     'equipo.php', 'recibo.php', 'orden.php', 'archivo.php',
     'inventario.php', 'bien.php', 'personas.php', 'persona.php',
 ];
-$inventarioPages = ['inventario_interno.php'];
+$inventarioPages = [
+    'inventario_interno.php', 'bienes_internos.php', 'bien_interno.php',
+    'prestar.php', 'prestamos.php', 'prestamo.php',
+    'recibo_prestamo.php', 'recibo_devolucion.php',
+];
 $enSoporte = in_array($current, $soportePages, true);
 $enInventario = in_array($current, $inventarioPages, true);
+$prestamosVencidos = 0;
+try {
+    $prestamosVencidos = countPrestamosVencidos(db());
+} catch (Throwable $e) {
+    $prestamosVencidos = 0;
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -86,9 +96,23 @@ $enInventario = in_array($current, $inventarioPages, true);
                     <span class="nav-caret" aria-hidden="true"><?= $icon('<polyline points="6 9 12 15 18 9"/>') ?></span>
                 </button>
                 <div class="nav-group-items">
-                    <a class="<?= $navActive(['inventario_interno.php']) ?>" href="<?= h(url('inventario_interno.php')) ?>" title="Inventario interno">
+                    <a class="<?= $navActive(['inventario_interno.php']) ?>" href="<?= h(url('inventario_interno.php')) ?>" title="Panel interno">
                         <?= $icon('<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>') ?>
-                        <span class="nav-label">Inicio</span>
+                        <span class="nav-label">Panel</span>
+                        <?php if ($prestamosVencidos > 0): ?><span class="nav-count"><?= (int) $prestamosVencidos ?></span><?php endif; ?>
+                    </a>
+                    <a class="<?= $navActive(['bienes_internos.php', 'bien_interno.php']) ?>" href="<?= h(url('bienes_internos.php')) ?>" title="Bienes internos">
+                        <?= $icon('<rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/>') ?>
+                        <span class="nav-label">Bienes</span>
+                    </a>
+                    <a class="<?= $navActive(['prestar.php']) ?>" href="<?= h(url('prestar.php')) ?>" title="Prestar material">
+                        <?= $icon('<path d="M12 5v14"/><path d="M5 12h14"/>') ?>
+                        <span class="nav-label">Prestar</span>
+                    </a>
+                    <a class="<?= $navActive(['prestamos.php', 'prestamo.php', 'recibo_prestamo.php', 'recibo_devolucion.php']) ?>" href="<?= h(url('prestamos.php')) ?>" title="Préstamos">
+                        <?= $icon('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>') ?>
+                        <span class="nav-label">Préstamos</span>
+                        <?php if ($prestamosVencidos > 0): ?><span class="nav-count"><?= (int) $prestamosVencidos ?></span><?php endif; ?>
                     </a>
                 </div>
             </div>

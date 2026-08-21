@@ -108,6 +108,39 @@ function tiposEquipo(): array
     ];
 }
 
+function tiposEquipoInterno(): array
+{
+    return array_values(array_unique(array_merge(tiposEquipo(), [
+        'Cable HDMI',
+        'Cable VGA',
+        'Cable de red',
+        'Mouse',
+        'Teclado',
+        'Webcam',
+        'Micrófono',
+        'Bocinas',
+        'Adaptador',
+        'Cargador',
+        'Extensión / multicontacto',
+        'Memoria USB',
+        'Disco duro / SSD',
+    ])));
+}
+
+function estadosBienInterno(): array
+{
+    return [
+        'disponible' => 'Disponible',
+        'prestado' => 'Prestado',
+        'baja' => 'Baja',
+    ];
+}
+
+function estadoBienInternoLabel(string $estado): string
+{
+    return estadosBienInterno()[$estado] ?? $estado;
+}
+
 function tiposProblema(): array
 {
     return [
@@ -524,7 +557,8 @@ function listPersonas(PDO $pdo, string $q = '', string $area = ''): array
     $sql = 'SELECT p.*,
                 (SELECT COUNT(*) FROM bienes b WHERE b.persona_id = p.id) AS equipos,
                 (SELECT COUNT(*) FROM equipos e WHERE e.persona_id = p.id) AS servicios,
-                (SELECT MAX(e.fecha_recepcion) FROM equipos e WHERE e.persona_id = p.id) AS ultimo_servicio
+                (SELECT MAX(e.fecha_recepcion) FROM equipos e WHERE e.persona_id = p.id) AS ultimo_servicio,
+                (SELECT COUNT(*) FROM prestamos pr WHERE pr.persona_id = p.id AND pr.estado = \'activo\') AS prestamos_activos
             FROM personas p';
     $where = [];
     $params = [];
@@ -921,5 +955,688 @@ function consultaUrl(string $folio): string
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
     return $scheme . '://' . $host . url('consulta.php?folio=' . urlencode($folio));
+}
+
+function ensureInventarioInternoSchema(PDO $pdo): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS bienes_internos (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            tipo_equipo VARCHAR(80) NOT NULL,
+            marca VARCHAR(120) NOT NULL,
+            modelo VARCHAR(120) NOT NULL,
+            numero_serie VARCHAR(120) DEFAULT NULL,
+            numero_inventario VARCHAR(120) DEFAULT NULL,
+            estado_fisico VARCHAR(80) DEFAULT NULL,
+            accesorios TEXT DEFAULT NULL,
+            observaciones TEXT DEFAULT NULL,
+            ubicacion VARCHAR(160) DEFAULT NULL,
+            estado VARCHAR(40) NOT NULL DEFAULT 'disponible',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_bi_estado (estado),
+            KEY idx_bi_serie (numero_serie),
+            KEY idx_bi_inventario (numero_inventario)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS fotos_internos (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            bien_interno_id INT NOT NULL,
+            ruta VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_fotos_internos_bien FOREIGN KEY (bien_interno_id) REFERENCES bienes_internos(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS prestamos (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            folio VARCHAR(20) NOT NULL UNIQUE,
+            persona_id INT NOT NULL,
+            fecha_prestamo DATETIME NOT NULL,
+            fecha_compromiso DATE NOT NULL,
+            observaciones TEXT DEFAULT NULL,
+            prestado_por VARCHAR(160) DEFAULT NULL,
+            estado VARCHAR(40) NOT NULL DEFAULT 'activo',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_prestamos_estado_fecha (estado, fecha_compromiso),
+            CONSTRAINT fk_prestamos_persona FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE RESTRICT
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS prestamo_devoluciones (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            prestamo_id INT NOT NULL,
+            fecha DATETIME NOT NULL,
+            recibido_por VARCHAR(160) DEFAULT NULL,
+            observaciones TEXT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_pdev_prestamo FOREIGN KEY (prestamo_id) REFERENCES prestamos(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS prestamo_items (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            prestamo_id INT NOT NULL,
+            bien_interno_id INT NOT NULL,
+            estado_fisico_salida VARCHAR(80) DEFAULT NULL,
+            accesorios_salida TEXT DEFAULT NULL,
+            fecha_devolucion DATETIME DEFAULT NULL,
+            devolucion_id INT DEFAULT NULL,
+            estado_fisico_regreso VARCHAR(80) DEFAULT NULL,
+            CONSTRAINT fk_pitems_prestamo FOREIGN KEY (prestamo_id) REFERENCES prestamos(id) ON DELETE CASCADE,
+            CONSTRAINT fk_pitems_bien FOREIGN KEY (bien_interno_id) REFERENCES bienes_internos(id) ON DELETE RESTRICT,
+            CONSTRAINT fk_pitems_devolucion FOREIGN KEY (devolucion_id) REFERENCES prestamo_devoluciones(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+}
+
+function etiquetaBienInterno(array $b): string
+{
+    $nombre = trim((string) ($b['marca'] ?? '') . ' ' . (string) ($b['modelo'] ?? ''));
+    $tipo = trim((string) ($b['tipo_equipo'] ?? ''));
+    $label = $tipo !== '' ? $tipo : 'Bien';
+    if ($nombre !== '') {
+        $label .= ' · ' . $nombre;
+    }
+    if (!empty($b['numero_inventario'])) {
+        $label .= ' · Inv. ' . $b['numero_inventario'];
+    } elseif (!empty($b['numero_serie'])) {
+        $label .= ' · Serie ' . $b['numero_serie'];
+    }
+    return $label;
+}
+
+function getBienInterno(PDO $pdo, int $id): ?array
+{
+    $stmt = $pdo->prepare('SELECT * FROM bienes_internos WHERE id = ?');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function findBienInterno(PDO $pdo, ?string $serie, ?string $inventario, int $exceptId = 0): ?array
+{
+    $serie = trim((string) $serie);
+    $inventario = trim((string) $inventario);
+    if ($serie !== '') {
+        $sql = 'SELECT * FROM bienes_internos WHERE numero_serie = ?';
+        $params = [$serie];
+        if ($exceptId > 0) {
+            $sql .= ' AND id <> ?';
+            $params[] = $exceptId;
+        }
+        $sql .= ' LIMIT 1';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+        if ($row) {
+            return $row;
+        }
+    }
+    if ($inventario !== '') {
+        $sql = 'SELECT * FROM bienes_internos WHERE numero_inventario = ?';
+        $params = [$inventario];
+        if ($exceptId > 0) {
+            $sql .= ' AND id <> ?';
+            $params[] = $exceptId;
+        }
+        $sql .= ' LIMIT 1';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch();
+        if ($row) {
+            return $row;
+        }
+    }
+    return null;
+}
+
+function saveBienInterno(PDO $pdo, array $data, int $id = 0): int
+{
+    $tipo = trim((string) ($data['tipo_equipo'] ?? ''));
+    $marca = trim((string) ($data['marca'] ?? ''));
+    $modelo = trim((string) ($data['modelo'] ?? ''));
+    $serie = trim((string) ($data['numero_serie'] ?? '')) ?: null;
+    $inventario = trim((string) ($data['numero_inventario'] ?? '')) ?: null;
+    $estadoFisico = trim((string) ($data['estado_fisico'] ?? '')) ?: null;
+    $accesorios = trim((string) ($data['accesorios'] ?? '')) ?: null;
+    $observaciones = trim((string) ($data['observaciones'] ?? '')) ?: null;
+    $ubicacion = trim((string) ($data['ubicacion'] ?? '')) ?: null;
+    if ($tipo === '' || $marca === '' || $modelo === '') {
+        throw new RuntimeException('Tipo, marca y modelo del bien son obligatorios.');
+    }
+    $dup = findBienInterno($pdo, $serie, $inventario, $id);
+    if ($dup) {
+        throw new RuntimeException('Ya existe un bien interno con esa serie o número de inventario.');
+    }
+    if ($id > 0 && getBienInterno($pdo, $id)) {
+        $stmt = $pdo->prepare(
+            'UPDATE bienes_internos SET tipo_equipo = ?, marca = ?, modelo = ?, numero_serie = ?,
+             numero_inventario = ?, estado_fisico = ?, accesorios = ?, observaciones = ?, ubicacion = ?
+             WHERE id = ?'
+        );
+        $stmt->execute([$tipo, $marca, $modelo, $serie, $inventario, $estadoFisico, $accesorios, $observaciones, $ubicacion, $id]);
+        return $id;
+    }
+    $stmt = $pdo->prepare(
+        'INSERT INTO bienes_internos (
+            tipo_equipo, marca, modelo, numero_serie, numero_inventario,
+            estado_fisico, accesorios, observaciones, ubicacion, estado
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    $stmt->execute([$tipo, $marca, $modelo, $serie, $inventario, $estadoFisico, $accesorios, $observaciones, $ubicacion, 'disponible']);
+    return (int) $pdo->lastInsertId();
+}
+
+function setEstadoBienInterno(PDO $pdo, int $id, string $estado): void
+{
+    if (!isset(estadosBienInterno()[$estado])) {
+        throw new RuntimeException('Estado de bien no válido.');
+    }
+    $bien = getBienInterno($pdo, $id);
+    if (!$bien) {
+        throw new RuntimeException('El bien no existe.');
+    }
+    if ($estado === 'baja' && $bien['estado'] === 'prestado') {
+        throw new RuntimeException('No se puede dar de baja un bien que está prestado. Recíbalo primero.');
+    }
+    if ($estado === 'disponible' && $bien['estado'] === 'prestado') {
+        throw new RuntimeException('Un bien prestado solo vuelve a disponible al devolverlo.');
+    }
+    $stmt = $pdo->prepare('UPDATE bienes_internos SET estado = ? WHERE id = ?');
+    $stmt->execute([$estado, $id]);
+}
+
+function listBienesInternosMarcas(PDO $pdo): array
+{
+    return $pdo->query(
+        "SELECT DISTINCT marca FROM bienes_internos WHERE marca IS NOT NULL AND marca <> '' ORDER BY marca"
+    )->fetchAll(PDO::FETCH_COLUMN);
+}
+
+function listBienesInternosUbicaciones(PDO $pdo): array
+{
+    return $pdo->query(
+        "SELECT DISTINCT ubicacion FROM bienes_internos WHERE ubicacion IS NOT NULL AND ubicacion <> '' ORDER BY ubicacion"
+    )->fetchAll(PDO::FETCH_COLUMN);
+}
+
+function listBienesInternos(PDO $pdo, string $q = '', array $filters = []): array
+{
+    $sql = 'SELECT b.*,
+                (SELECT COUNT(*) FROM prestamo_items i WHERE i.bien_interno_id = b.id) AS prestamos,
+                ult.folio AS prestamo_folio,
+                ult.prestamo_id AS prestamo_id,
+                ult.persona_nombre AS prestamo_persona,
+                ult.fecha_compromiso AS prestamo_compromiso
+            FROM bienes_internos b
+            LEFT JOIN (
+                SELECT i.bien_interno_id, p.id AS prestamo_id, p.folio, p.fecha_compromiso, pe.nombre AS persona_nombre
+                FROM prestamo_items i
+                INNER JOIN prestamos p ON p.id = i.prestamo_id
+                LEFT JOIN personas pe ON pe.id = p.persona_id
+                WHERE i.fecha_devolucion IS NULL
+            ) ult ON ult.bien_interno_id = b.id';
+    $where = [];
+    $params = [];
+    if ($q !== '') {
+        $where[] = '(b.marca LIKE ? OR b.modelo LIKE ? OR b.numero_serie LIKE ?
+                     OR b.numero_inventario LIKE ? OR b.tipo_equipo LIKE ?
+                     OR b.ubicacion LIKE ? OR b.accesorios LIKE ? OR ult.folio LIKE ? OR ult.persona_nombre LIKE ?)';
+        $like = '%' . $q . '%';
+        $params = array_fill(0, 9, $like);
+    }
+    $tipo = trim((string) ($filters['tipo'] ?? ''));
+    if ($tipo !== '') {
+        $where[] = 'b.tipo_equipo = ?';
+        $params[] = $tipo;
+    }
+    $marca = trim((string) ($filters['marca'] ?? ''));
+    if ($marca !== '') {
+        $where[] = 'b.marca = ?';
+        $params[] = $marca;
+    }
+    $estado = trim((string) ($filters['estado'] ?? ''));
+    if ($estado !== '' && isset(estadosBienInterno()[$estado])) {
+        $where[] = 'b.estado = ?';
+        $params[] = $estado;
+    }
+    $ubicacion = trim((string) ($filters['ubicacion'] ?? ''));
+    if ($ubicacion !== '') {
+        $where[] = 'b.ubicacion = ?';
+        $params[] = $ubicacion;
+    }
+    if ($where) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+    $sql .= ' ORDER BY b.tipo_equipo, b.marca, b.modelo, b.id';
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+function listBienesInternosDisponibles(PDO $pdo): array
+{
+    return listBienesInternos($pdo, '', ['estado' => 'disponible']);
+}
+
+function getFotosInternos(PDO $pdo, int $bienId): array
+{
+    $stmt = $pdo->prepare('SELECT * FROM fotos_internos WHERE bien_interno_id = ? ORDER BY id');
+    $stmt->execute([$bienId]);
+    return $stmt->fetchAll();
+}
+
+function saveUploadedFotosList(array $files, string $subdir = 'fotos'): array
+{
+    $rutas = [];
+    if (empty($files['name']) || !is_array($files['name'])) {
+        return $rutas;
+    }
+    $count = count($files['name']);
+    for ($i = 0; $i < $count; $i++) {
+        if (($files['error'][$i] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            continue;
+        }
+        $file = [
+            'name' => $files['name'][$i],
+            'type' => $files['type'][$i] ?? '',
+            'tmp_name' => $files['tmp_name'][$i],
+            'error' => $files['error'][$i],
+            'size' => $files['size'][$i] ?? 0,
+        ];
+        $ruta = saveUploadedFile($file, $subdir, ['jpg', 'jpeg', 'png', 'webp'], MAX_PHOTO_BYTES);
+        if ($ruta) {
+            $rutas[] = $ruta;
+        }
+    }
+    return $rutas;
+}
+
+function addFotosInternos(PDO $pdo, int $bienId, array $files): int
+{
+    $rutas = saveUploadedFotosList($files);
+    $ins = $pdo->prepare('INSERT INTO fotos_internos (bien_interno_id, ruta) VALUES (?, ?)');
+    foreach ($rutas as $ruta) {
+        $ins->execute([$bienId, $ruta]);
+    }
+    return count($rutas);
+}
+
+function deleteFotoInterno(PDO $pdo, int $fotoId, int $bienId): void
+{
+    $stmt = $pdo->prepare('SELECT * FROM fotos_internos WHERE id = ? AND bien_interno_id = ?');
+    $stmt->execute([$fotoId, $bienId]);
+    $foto = $stmt->fetch();
+    if (!$foto) {
+        throw new RuntimeException('La foto no existe.');
+    }
+    $pdo->prepare('DELETE FROM fotos_internos WHERE id = ?')->execute([$fotoId]);
+}
+
+function generateFolioPrestamo(PDO $pdo): string
+{
+    $year = date('Y');
+    $prefix = 'PI-' . $year . '-';
+    $stmt = $pdo->prepare('SELECT folio FROM prestamos WHERE folio LIKE ? ORDER BY id DESC LIMIT 1');
+    $stmt->execute([$prefix . '%']);
+    $last = $stmt->fetchColumn();
+    $n = 1;
+    if ($last && preg_match('/(\d+)$/', $last, $m)) {
+        $n = ((int) $m[1]) + 1;
+    }
+    return $prefix . str_pad((string) $n, 4, '0', STR_PAD_LEFT);
+}
+
+function prestamoVencido(array $prestamo): bool
+{
+    if (($prestamo['estado'] ?? '') !== 'activo') {
+        return false;
+    }
+    $fecha = substr((string) ($prestamo['fecha_compromiso'] ?? ''), 0, 10);
+    return $fecha !== '' && $fecha < date('Y-m-d');
+}
+
+function prestamoVencePronto(array $prestamo): bool
+{
+    if (($prestamo['estado'] ?? '') !== 'activo' || prestamoVencido($prestamo)) {
+        return false;
+    }
+    $fecha = substr((string) ($prestamo['fecha_compromiso'] ?? ''), 0, 10);
+    if ($fecha === '') {
+        return false;
+    }
+    $hoy = date('Y-m-d');
+    $manana = date('Y-m-d', strtotime('+1 day'));
+    return $fecha === $hoy || $fecha === $manana;
+}
+
+function prestamoEstadoVisual(array $prestamo): string
+{
+    if (($prestamo['estado'] ?? '') === 'cerrado') {
+        return 'cerrado';
+    }
+    if (prestamoVencido($prestamo)) {
+        return 'vencido';
+    }
+    if (prestamoVencePronto($prestamo)) {
+        return 'vence_pronto';
+    }
+    return 'activo';
+}
+
+function prestamoEstadoLabel(string $estado): string
+{
+    return [
+        'activo' => 'Activo',
+        'vencido' => 'Vencido',
+        'vence_pronto' => 'Vence pronto',
+        'cerrado' => 'Devuelto',
+    ][$estado] ?? $estado;
+}
+
+function sqlPrestamoSelect(): string
+{
+    return "SELECT p.*,
+                pe.nombre AS persona_nombre,
+                pe.area_dependencia AS persona_area,
+                pe.telefono AS persona_telefono,
+                (SELECT COUNT(*) FROM prestamo_items i WHERE i.prestamo_id = p.id) AS items_total,
+                (SELECT COUNT(*) FROM prestamo_items i WHERE i.prestamo_id = p.id AND i.fecha_devolucion IS NULL) AS items_fuera
+            FROM prestamos p
+            LEFT JOIN personas pe ON pe.id = p.persona_id";
+}
+
+function decoratePrestamo(array $p): array
+{
+    $p['estado_visual'] = prestamoEstadoVisual($p);
+    $p['estado_visual_label'] = prestamoEstadoLabel($p['estado_visual']);
+    return $p;
+}
+
+function getPrestamo(PDO $pdo, int $id): ?array
+{
+    $stmt = $pdo->prepare(sqlPrestamoSelect() . ' WHERE p.id = ?');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ? decoratePrestamo($row) : null;
+}
+
+function getPrestamoItems(PDO $pdo, int $prestamoId, bool $soloPendientes = false): array
+{
+    $sql = 'SELECT i.*, b.tipo_equipo, b.marca, b.modelo, b.numero_serie, b.numero_inventario, b.ubicacion, b.estado AS bien_estado
+            FROM prestamo_items i
+            INNER JOIN bienes_internos b ON b.id = i.bien_interno_id
+            WHERE i.prestamo_id = ?';
+    if ($soloPendientes) {
+        $sql .= ' AND i.fecha_devolucion IS NULL';
+    }
+    $sql .= ' ORDER BY i.id';
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$prestamoId]);
+    return $stmt->fetchAll();
+}
+
+function getPrestamoDevolucion(PDO $pdo, int $id): ?array
+{
+    $stmt = $pdo->prepare(
+        'SELECT d.*, p.folio, p.persona_id, p.fecha_prestamo, p.fecha_compromiso, p.prestado_por,
+                pe.nombre AS persona_nombre, pe.area_dependencia AS persona_area, pe.telefono AS persona_telefono
+         FROM prestamo_devoluciones d
+         INNER JOIN prestamos p ON p.id = d.prestamo_id
+         LEFT JOIN personas pe ON pe.id = p.persona_id
+         WHERE d.id = ?'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function getDevolucionItems(PDO $pdo, int $devolucionId): array
+{
+    $stmt = $pdo->prepare(
+        'SELECT i.*, b.tipo_equipo, b.marca, b.modelo, b.numero_serie, b.numero_inventario
+         FROM prestamo_items i
+         INNER JOIN bienes_internos b ON b.id = i.bien_interno_id
+         WHERE i.devolucion_id = ?
+         ORDER BY i.id'
+    );
+    $stmt->execute([$devolucionId]);
+    return $stmt->fetchAll();
+}
+
+function listPrestamoDevoluciones(PDO $pdo, int $prestamoId): array
+{
+    $stmt = $pdo->prepare('SELECT * FROM prestamo_devoluciones WHERE prestamo_id = ? ORDER BY id DESC');
+    $stmt->execute([$prestamoId]);
+    return $stmt->fetchAll();
+}
+
+function listPrestamos(PDO $pdo, string $q = '', string $filtro = ''): array
+{
+    $sql = sqlPrestamoSelect();
+    $where = [];
+    $params = [];
+    if ($q !== '') {
+        $where[] = '(p.folio LIKE ? OR pe.nombre LIKE ? OR pe.area_dependencia LIKE ? OR pe.telefono LIKE ?
+                     OR p.prestado_por LIKE ? OR p.observaciones LIKE ?)';
+        $like = '%' . $q . '%';
+        $params = array_fill(0, 6, $like);
+    }
+    if ($filtro === 'activo') {
+        $where[] = "p.estado = 'activo' AND p.fecha_compromiso > CURDATE()";
+    } elseif ($filtro === 'vencido') {
+        $where[] = "p.estado = 'activo' AND p.fecha_compromiso < CURDATE()";
+    } elseif ($filtro === 'vence_pronto') {
+        $where[] = "p.estado = 'activo' AND p.fecha_compromiso >= CURDATE() AND p.fecha_compromiso <= DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+    } elseif ($filtro === 'cerrado') {
+        $where[] = "p.estado = 'cerrado'";
+    } elseif ($filtro === 'abiertos') {
+        $where[] = "p.estado = 'activo'";
+    }
+    if ($where) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+    $sql .= ' ORDER BY (p.estado = \'activo\') DESC, p.fecha_compromiso ASC, p.id DESC';
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return array_map('decoratePrestamo', $stmt->fetchAll());
+}
+
+function prestamosDePersona(PDO $pdo, int $personaId): array
+{
+    $stmt = $pdo->prepare(sqlPrestamoSelect() . ' WHERE p.persona_id = ? ORDER BY p.fecha_prestamo DESC, p.id DESC');
+    $stmt->execute([$personaId]);
+    return array_map('decoratePrestamo', $stmt->fetchAll());
+}
+
+function prestamosDeBienInterno(PDO $pdo, int $bienId): array
+{
+    $stmt = $pdo->prepare(
+        sqlPrestamoSelect() . '
+         WHERE p.id IN (SELECT i.prestamo_id FROM prestamo_items i WHERE i.bien_interno_id = ?)
+         ORDER BY p.fecha_prestamo DESC, p.id DESC'
+    );
+    $stmt->execute([$bienId]);
+    return array_map('decoratePrestamo', $stmt->fetchAll());
+}
+
+function prestamoActivoDeBien(PDO $pdo, int $bienId): ?array
+{
+    $stmt = $pdo->prepare(
+        sqlPrestamoSelect() . '
+         INNER JOIN prestamo_items i ON i.prestamo_id = p.id
+         WHERE i.bien_interno_id = ? AND i.fecha_devolucion IS NULL
+         LIMIT 1'
+    );
+    $stmt->execute([$bienId]);
+    $row = $stmt->fetch();
+    return $row ? decoratePrestamo($row) : null;
+}
+
+function countPrestamosVencidos(PDO $pdo): int
+{
+    return (int) $pdo->query(
+        "SELECT COUNT(*) FROM prestamos WHERE estado = 'activo' AND fecha_compromiso < CURDATE()"
+    )->fetchColumn();
+}
+
+function statsInventarioInterno(PDO $pdo): array
+{
+    $disponibles = (int) $pdo->query("SELECT COUNT(*) FROM bienes_internos WHERE estado = 'disponible'")->fetchColumn();
+    $prestados = (int) $pdo->query("SELECT COUNT(*) FROM bienes_internos WHERE estado = 'prestado'")->fetchColumn();
+    $bajas = (int) $pdo->query("SELECT COUNT(*) FROM bienes_internos WHERE estado = 'baja'")->fetchColumn();
+    $vencidos = countPrestamosVencidos($pdo);
+    $vencePronto = (int) $pdo->query(
+        "SELECT COUNT(*) FROM prestamos
+         WHERE estado = 'activo' AND fecha_compromiso >= CURDATE()
+           AND fecha_compromiso <= DATE_ADD(CURDATE(), INTERVAL 1 DAY)"
+    )->fetchColumn();
+    $activos = (int) $pdo->query("SELECT COUNT(*) FROM prestamos WHERE estado = 'activo'")->fetchColumn();
+    return [
+        'disponibles' => $disponibles,
+        'prestados' => $prestados,
+        'bajas' => $bajas,
+        'vencidos' => $vencidos,
+        'vence_pronto' => $vencePronto,
+        'activos' => $activos,
+        'bienes' => $disponibles + $prestados + $bajas,
+    ];
+}
+
+function crearPrestamo(PDO $pdo, array $data, array $bienIds): int
+{
+    $personaId = (int) ($data['persona_id'] ?? 0);
+    $fechaPrestamo = trim((string) ($data['fecha_prestamo'] ?? ''));
+    $fechaCompromiso = trim((string) ($data['fecha_compromiso'] ?? ''));
+    $observaciones = trim((string) ($data['observaciones'] ?? '')) ?: null;
+    $prestadoPor = trim((string) ($data['prestado_por'] ?? '')) ?: null;
+    $bienIds = array_values(array_unique(array_map('intval', $bienIds)));
+    $bienIds = array_values(array_filter($bienIds, static fn(int $id): bool => $id > 0));
+    if ($personaId < 1 || !getPersona($pdo, $personaId)) {
+        throw new RuntimeException('Seleccione a la persona que recibe el material.');
+    }
+    if (!$bienIds) {
+        throw new RuntimeException('Seleccione al menos un bien para prestar.');
+    }
+    if ($fechaPrestamo === '') {
+        $fechaPrestamo = date('Y-m-d H:i:s');
+    } else {
+        $ts = strtotime(str_replace('T', ' ', $fechaPrestamo));
+        if ($ts === false) {
+            throw new RuntimeException('La fecha de préstamo no es válida.');
+        }
+        $fechaPrestamo = date('Y-m-d H:i:s', $ts);
+    }
+    if ($fechaCompromiso === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaCompromiso)) {
+        throw new RuntimeException('Indique la fecha de devolución comprometida.');
+    }
+    if ($fechaCompromiso < substr($fechaPrestamo, 0, 10)) {
+        throw new RuntimeException('La fecha de devolución no puede ser anterior al préstamo.');
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $folio = generateFolioPrestamo($pdo);
+        $stmt = $pdo->prepare(
+            'INSERT INTO prestamos (folio, persona_id, fecha_prestamo, fecha_compromiso, observaciones, prestado_por, estado)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([$folio, $personaId, $fechaPrestamo, $fechaCompromiso, $observaciones, $prestadoPor, 'activo']);
+        $prestamoId = (int) $pdo->lastInsertId();
+        $insItem = $pdo->prepare(
+            'INSERT INTO prestamo_items (prestamo_id, bien_interno_id, estado_fisico_salida, accesorios_salida)
+             VALUES (?, ?, ?, ?)'
+        );
+        $updBien = $pdo->prepare('UPDATE bienes_internos SET estado = ? WHERE id = ? AND estado = ?');
+        foreach ($bienIds as $bid) {
+            $bien = getBienInterno($pdo, $bid);
+            if (!$bien) {
+                throw new RuntimeException('Uno de los bienes ya no existe.');
+            }
+            if ($bien['estado'] !== 'disponible') {
+                throw new RuntimeException('«' . etiquetaBienInterno($bien) . '» no está disponible.');
+            }
+            $updBien->execute(['prestado', $bid, 'disponible']);
+            if ($updBien->rowCount() !== 1) {
+                throw new RuntimeException('«' . etiquetaBienInterno($bien) . '» acaba de prestarse a alguien más.');
+            }
+            $insItem->execute([$prestamoId, $bid, $bien['estado_fisico'], $bien['accesorios']]);
+        }
+        $pdo->commit();
+        return $prestamoId;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+}
+
+function devolverPrestamoItems(PDO $pdo, int $prestamoId, array $itemIds, string $recibidoPor, string $observaciones = '', array $estadosFisicos = []): int
+{
+    $prestamo = getPrestamo($pdo, $prestamoId);
+    if (!$prestamo || $prestamo['estado'] !== 'activo') {
+        throw new RuntimeException('El préstamo no está activo.');
+    }
+    $itemIds = array_values(array_unique(array_map('intval', $itemIds)));
+    $itemIds = array_values(array_filter($itemIds, static fn(int $id): bool => $id > 0));
+    if (!$itemIds) {
+        throw new RuntimeException('Seleccione al menos un bien a devolver.');
+    }
+    $recibidoPor = trim($recibidoPor) ?: (currentUser()['nombre'] ?? ORG_AREA);
+    $observaciones = trim($observaciones) ?: null;
+    $ahora = date('Y-m-d H:i:s');
+
+    $pdo->beginTransaction();
+    try {
+        $insDev = $pdo->prepare(
+            'INSERT INTO prestamo_devoluciones (prestamo_id, fecha, recibido_por, observaciones) VALUES (?, ?, ?, ?)'
+        );
+        $insDev->execute([$prestamoId, $ahora, $recibidoPor, $observaciones]);
+        $devolucionId = (int) $pdo->lastInsertId();
+
+        $getItem = $pdo->prepare(
+            'SELECT * FROM prestamo_items WHERE id = ? AND prestamo_id = ? AND fecha_devolucion IS NULL'
+        );
+        $updItem = $pdo->prepare(
+            'UPDATE prestamo_items
+             SET fecha_devolucion = ?, devolucion_id = ?, estado_fisico_regreso = ?
+             WHERE id = ?'
+        );
+        $updBien = $pdo->prepare('UPDATE bienes_internos SET estado = ?, estado_fisico = COALESCE(?, estado_fisico) WHERE id = ?');
+
+        foreach ($itemIds as $itemId) {
+            $getItem->execute([$itemId, $prestamoId]);
+            $item = $getItem->fetch();
+            if (!$item) {
+                throw new RuntimeException('Uno de los bienes ya fue devuelto o no pertenece a este préstamo.');
+            }
+            $estadoRegreso = trim((string) ($estadosFisicos[$itemId] ?? $estadosFisicos[(string) $itemId] ?? '')) ?: null;
+            $updItem->execute([$ahora, $devolucionId, $estadoRegreso, $itemId]);
+            $updBien->execute(['disponible', $estadoRegreso, (int) $item['bien_interno_id']]);
+        }
+
+        $pend = $pdo->prepare('SELECT COUNT(*) FROM prestamo_items WHERE prestamo_id = ? AND fecha_devolucion IS NULL');
+        $pend->execute([$prestamoId]);
+        if ((int) $pend->fetchColumn() === 0) {
+            $pdo->prepare("UPDATE prestamos SET estado = 'cerrado' WHERE id = ?")->execute([$prestamoId]);
+        }
+        $pdo->commit();
+        return $devolucionId;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
 }
 ?>

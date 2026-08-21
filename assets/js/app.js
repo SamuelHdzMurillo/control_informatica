@@ -273,6 +273,30 @@ document.addEventListener('DOMContentLoaded', () => {
     bindBien('[data-suggest-bien="serie"]', '[data-suggest-box-bien]', 'serie');
     bindBien('[data-suggest-bien="inventario"]', '[data-suggest-box-bien-inv]', 'inventario');
 
+    const pickFilter = document.querySelector('[data-pick-filter]');
+    const pickItems = document.querySelectorAll('[data-pick-text]');
+    pickFilter?.addEventListener('input', () => {
+        const q = pickFilter.value.trim().toLowerCase();
+        pickItems.forEach((el) => {
+            const text = (el.getAttribute('data-pick-text') || '').toLowerCase();
+            el.hidden = q !== '' && !text.includes(q);
+        });
+    });
+
+    const fechaCompromiso = document.getElementById('fecha_compromiso');
+    document.querySelectorAll('[data-dias]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            if (!fechaCompromiso) return;
+            const dias = parseInt(btn.getAttribute('data-dias') || '0', 10);
+            const d = new Date();
+            d.setDate(d.getDate() + dias);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            fechaCompromiso.value = `${y}-${m}-${day}`;
+        });
+    });
+
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.suggest-wrap')) {
             document.querySelectorAll('.suggest-box').forEach((el) => { el.hidden = true; });

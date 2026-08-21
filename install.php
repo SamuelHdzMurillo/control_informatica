@@ -146,6 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     CONSTRAINT fk_bitacora_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             ");
+            ensureInventarioInternoSchema($pdo);
 
             $exists = $pdo->prepare('SELECT COUNT(*) FROM usuarios WHERE usuario = ?');
             $exists->execute([$usuario]);

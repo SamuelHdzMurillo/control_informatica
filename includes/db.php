@@ -53,5 +53,6 @@ function requireInstalled(): void
         redirect('install.php');
     }
     ensureEquipoSchema(db());
+    ensureInventarioInternoSchema(db());
 }
 ?>
